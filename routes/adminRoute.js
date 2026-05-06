@@ -4,7 +4,7 @@ import {
   rejectWorker,
   getAllWorkers,
   getAdminStats
-} from "../controllers/adminController.js";
+} from "../Controllers/adminController.js";
 
 const router = express.Router();
 
@@ -13,4 +13,4 @@ router.put("/approve/:id", approveWorker);
 router.put("/reject/:id", rejectWorker);
 router.get("/stats", getAdminStats);
 
-export default router;
+export default router;
