@@ -28,7 +28,7 @@ export const rejectWorker = async (req, res) => {
       req.params.id,
       {
         status: "Rejected",
-        notification: "❌ You are rejected by admin"
+        notification: " You are rejected by admin"
       },
       { new: true }
     );
@@ -40,13 +40,11 @@ export const rejectWorker = async (req, res) => {
   }
 };
 
-// GET ALL WORKERS
 export const getAllWorkers = async (req, res) => {
   const workers = await Worker.find();
   res.json({ workers });
 };
 
-// GET ADMIN DASHBOARD STATS
 export const getAdminStats = async (req, res) => {
   try {
     const totalUsers = await User.countDocuments({});
@@ -57,18 +55,15 @@ export const getAdminStats = async (req, res) => {
     const busyWorkers = await Worker.countDocuments({ status: "Busy" });
     const totalWorkers = await Worker.countDocuments({});
 
-    // Estimate revenue (e.g. ₹500 per completed booking, with a minimum fallback base of ₹15,000 to keep it looking premium)
     const calculatedRevenue = completedBookings * 500;
     const baseRevenue = 15000;
     const revenue = Math.max(calculatedRevenue, baseRevenue);
 
-    // Get recent bookings with populated worker details
     const recentBookingsList = await Booking.find()
       .sort({ createdAt: -1 })
       .limit(5)
       .populate("workerId");
 
-    // Aggregate service types to find top services
     const topServicesAggregate = await Booking.aggregate([
       { $group: { _id: "$serviceType", count: { $sum: 1 } } },
       { $sort: { count: -1 } }
@@ -92,4 +87,38 @@ export const getAdminStats = async (req, res) => {
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
-};
+};
+
+// GET ALL USERS
+export const getAllUsers = async (req, res) => {
+  try {
+    const users = await User.find({});
+    res.json({ success: true, users });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// UPDATE USER STATUS (ACTIVATE/DEACTIVATE)
+export const updateUserStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const user = await User.findByIdAndUpdate(
+      id,
+      { status },
+      { new: true }
+    );
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    res.json({ success: true, user });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+

@@ -93,11 +93,40 @@ router.get("/search", async (req, res) => {
   try {
     const { city, service } = req.query;
 
-    const workers = await Worker.find({
-      service: new RegExp(service, "i"),
-      location: new RegExp(city, "i"),
-      status: { $in: ["Active", "active", "Approved", "approved"] },
-    });
+    let serviceTerms = [];
+    if (service) {
+      serviceTerms.push(service);
+      const sLower = service.toLowerCase();
+      if (sLower === "electrical repair" || sLower === "electrician" || sLower === "electrical") {
+        serviceTerms.push("Electrician", "electrical", "electrical repair");
+      } else if (sLower === "home cleaning" || sLower === "cleaner" || sLower === "cleaning") {
+        serviceTerms.push("homeclean", "cleaning", "home cleaning");
+      } else if (sLower === "ac service" || sLower === "ac repair" || sLower === "ac") {
+        serviceTerms.push("AC Repair", "ac", "ac service");
+      } else if (sLower === "carpentry" || sLower === "carpenter" || sLower === "carpentrywork") {
+        serviceTerms.push("Carpenter", "carpentrywork", "carpentry");
+      } else if (sLower === "plumbing" || sLower === "plumber") {
+        serviceTerms.push("Plumber", "plumbing");
+      } else if (sLower === "pest control" || sLower === "pestcontrol") {
+        serviceTerms.push("Pest Control", "pestcontrol");
+      }
+    }
+
+    const queryObj = {
+      status: { $in: ["Active", "active", "Approved", "approved"] }
+    };
+
+    if (service && serviceTerms.length > 0) {
+      queryObj.service = { $in: serviceTerms.map(term => new RegExp("^" + term + "$", "i")) };
+    } else if (service) {
+      queryObj.service = new RegExp(service, "i");
+    }
+
+    if (city) {
+      queryObj.location = new RegExp(city, "i");
+    }
+
+    const workers = await Worker.find(queryObj);
 
     res.json({
       success: true,

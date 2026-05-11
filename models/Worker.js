@@ -10,7 +10,7 @@ const workerSchema = new mongoose.Schema(
     location: { type: String, required: true },
     status: {
       type: String,
-      enum: ["Pending", "Approved", "Rejected"],
+      enum: ["Pending", "Approved", "Rejected", "Active", "active", "approved", "Busy", "busy"],
       default: "Pending",
     },
     notification: {

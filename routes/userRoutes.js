@@ -41,37 +41,73 @@ router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    // check empty fields
     if (!email || !password) {
       return res.status(400).json({
+        success: false,
         message: "Email and password are required"
       });
     }
 
-    const user = await User.findOne({ email: email.trim().toLowerCase() });
+    const user = await User.findOne({
+      email: email.trim().toLowerCase()
+    });
 
     if (!user) {
       return res.status(400).json({
+        success: false,
         message: "User not found"
       });
     }
 
-    const userPassword = user.password || "";
-    if (userPassword.trim() !== password.trim()) {
+    if ((user.status || "").trim().toLowerCase() === "inactive") {
+      return res.status(403).json({
+        success: false,
+        message: "Your account has been deactivated by admin"
+      });
+    }
+
+    if ((user.password || "").trim() !== password.trim()) {
       return res.status(400).json({
+        success: false,
         message: "Wrong password"
       });
     }
 
-    res.json({
+    return res.status(200).json({
+      success: true,
       message: "Login success",
       user
     });
 
   } catch (error) {
     console.log("User Login Error:", error);
-    res.status(500).json({
+
+    return res.status(500).json({
+      success: false,
       message: "Server error"
     });
+  }
+});
+
+router.put("/status/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const user = await User.findByIdAndUpdate(
+      id,
+      { status },
+      { new: true }
+    );
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    res.json({ success: true, user });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

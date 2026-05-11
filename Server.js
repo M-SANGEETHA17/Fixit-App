@@ -38,6 +38,20 @@ app.use("/api/feedback", feedbackRoutes);
 // app.use("/api", overpassRoutes);
 app.use('/api/fetch', fetchRoutes);
 
+app.get("/api/settings", (req, res) => {
+  res.json({
+    companyName: "Life Changers Ind",
+    mainBranch: "5/106A, JJ Nagar, Reddiarpatti, Tirunelveli, Tamil Nadu 627007",
+    subBranch: "Makkah Mukarramah Street, Safath, Jubail - 35514",
+    phones: [
+      "+91 94860 42369",
+      "+91 99430 42369",
+      "+91 81480 42369"
+    ],
+    email: "lifechangersind@gmail.com"
+  });
+});
+
 app.get("/", (req, res) => {
   res.send("Backend is running");
 });
