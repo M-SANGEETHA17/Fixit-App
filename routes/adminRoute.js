@@ -10,11 +10,16 @@ import {
 
 const router = express.Router();
 
+// Workers
 router.get("/workers", getAllWorkers);
-router.get("/users", getAllUsers);
-router.put("/users/status/:id", updateUserStatus);
 router.put("/approve/:id", approveWorker);
 router.put("/reject/:id", rejectWorker);
+
+// Users
+router.get("/users", getAllUsers);
+router.put("/users/status/:id", updateUserStatus);
+
+// Admin stats
 router.get("/stats", getAdminStats);
 
-export default router;
+export default router;
