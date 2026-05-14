@@ -112,7 +112,7 @@ export default function Navbar() {
         <div className="md:hidden mt-4 flex flex-col gap-3 text-sm font-medium">
           <Link to="/">Home</Link>
           <Link to="/cmpy">About</Link>
-
+          <Link to="/adminuser">Users</Link>
           <div>
             <button
               onClick={() => setOpen(!open)}

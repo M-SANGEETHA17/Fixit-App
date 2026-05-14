@@ -18,6 +18,7 @@ import {
 } from "react-icons/fa";
 import { MdOutlineVerified } from "react-icons/md";
 import { Geolocation } from "@capacitor/geolocation";
+import { API_BASE_URL } from "../config";
 
 export default function WorkerSearch({
   isOpen,
@@ -62,8 +63,7 @@ export default function WorkerSearch({
     const service = parts[0].trim();
     const city = parts[1].trim();
 
-    const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-    const baseUrl = isLocal ? "http://localhost:5005" : "https://fixit-app-w0dp.onrender.com";
+    const baseUrl = API_BASE_URL;
 
     try {
     

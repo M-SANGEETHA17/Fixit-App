@@ -65,12 +65,13 @@ export default function AdminNavbar() {
 
           <Link to="/admindashboard" onClick={() => setMenuOpen(false)}>Dashboard</Link>
           <Link to="/adminworker" onClick={() => setMenuOpen(false)}>Workers</Link>
+          <Link to="/adminuser" onClick={() => setMenuOpen(false)}>Users</Link>
           <Link to="/adminrequest" onClick={() => setMenuOpen(false)}>Requests</Link>
           <Link to="/adminreport" onClick={() => setMenuOpen(false)}>Reports</Link>
           <Link to="/adminquery" onClick={() => setMenuOpen(false)}>Queries</Link>
 
-          <Link to="/adminlogin"onClick={() => { setMenuOpen(false); handleLogout(); }}
-          className="px-4 py-2 rounded-full bg-green-500 text-white">Logo</Link>
+          <Link to="/adminlogin" onClick={() => { setMenuOpen(false); handleLogout(); }}
+          className="px-4 py-2 rounded-full bg-green-500 text-white">Logout</Link>
       </div>
       )}
 

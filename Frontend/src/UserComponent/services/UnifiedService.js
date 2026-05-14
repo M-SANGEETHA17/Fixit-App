@@ -6,6 +6,7 @@ import { handleBookingAndNotify } from "../../App/Message";
 import WorkerSearch from "../../App/WorkerSearch";
 import { Geolocation } from "@capacitor/geolocation";
 import { motion, AnimatePresence } from "framer-motion";
+import { API_BASE_URL } from "../../config";
 import {
   FaMapMarkerAlt,
   FaUser,
@@ -87,8 +88,7 @@ export default function UnifiedService({
     setReviews([]);
     
     try {
-      const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-      const baseUrl = isLocal ? "http://localhost:5005" : "https://fixit-app-w0dp.onrender.com";
+      const baseUrl = API_BASE_URL;
       const email = worker.email;
       
       if (!email) {
@@ -138,8 +138,7 @@ export default function UnifiedService({
   };
 
   const fetchWorkers = async () => {
-    const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-    const baseUrl = isLocal ? "http://localhost:5005" : "https://fixit-app-w0dp.onrender.com";
+    const baseUrl = API_BASE_URL;
     setLoadingWorkers(true);
     try {
       const res = await axios.get(
@@ -192,7 +191,7 @@ export default function UnifiedService({
   if (location?.locationString) {
     const locStringLower = location.locationString.toLowerCase();
 
-    filtered = filtered.filter((worker) => {
+    const locFiltered = filtered.filter((worker) => {
       const workerLoc =
         typeof worker.location === "string"
           ? worker.location.toLowerCase()
@@ -214,6 +213,12 @@ export default function UnifiedService({
         parts.some(part => workerLoc.includes(part) || part.includes(workerLoc))
       );
     });
+
+    // UX FIX: If strict location filtering yields 0 results, fall back to showing all workers 
+    // so that the screen is not empty and unusable.
+    if (locFiltered.length > 0) {
+      filtered = locFiltered;
+    }
   }
 
   return filtered;
@@ -500,8 +505,7 @@ export default function UnifiedService({
 
     setSendingOtp(true);
 
-    const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-    const baseUrl = isLocal ? "http://localhost:5005" : "https://fixit-app-w0dp.onrender.com";
+    const baseUrl = API_BASE_URL;
 
     try {
       const res = await axios.post(
@@ -524,8 +528,7 @@ export default function UnifiedService({
   const verifyOtp = async () => {
     setVerifyingOtp(true);
 
-    const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-    const baseUrl = isLocal ? "http://localhost:5005" : "https://fixit-app-w0dp.onrender.com";
+    const baseUrl = API_BASE_URL;
 
     try {
       const res = await axios.post(
@@ -576,8 +579,7 @@ export default function UnifiedService({
       return;
     }
 
-    const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-    const baseUrl = isLocal ? "http://localhost:5005" : "https://fixit-app-w0dp.onrender.com";
+    const baseUrl = API_BASE_URL;
 
     try {
       const res = await fetch(`${baseUrl}/api/queries`, {
