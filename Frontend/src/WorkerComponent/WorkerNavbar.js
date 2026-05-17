@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import axios from "axios";
 import { Link, useNavigate } from "react-router-dom";
 import {
   FaBars,
@@ -15,7 +16,9 @@ export default function WorkerNavbar() {
 
   useEffect(() => {
     const storedWorker = JSON.parse(localStorage.getItem("worker"));
-    setWorker(storedWorker);
+    if (storedWorker) {
+      setWorker(storedWorker);
+    }
   }, []);
 
   const handleLogout = () => {
@@ -47,7 +50,6 @@ export default function WorkerNavbar() {
           </p>
         </div>
 
-        {/* Desktop Nav */}
         <div className="hidden md:flex items-center gap-6 text-sm font-medium">
           <Link to="/workerdashboard" className="hover:text-green-600 transition">
             Dashboard

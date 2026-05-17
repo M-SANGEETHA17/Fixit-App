@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import axios from "axios";
+import { API_BASE_URL } from "../config";
 import {
   FaUsers,
   FaClipboardList,
@@ -12,6 +13,7 @@ import {
   FaArrowUp,
   FaArrowDown,
 } from "react-icons/fa";
+import Footer from "../UserComponent/Footer";
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState({
@@ -29,7 +31,7 @@ export default function AdminDashboard() {
 
   const fetchStats = async () => {
     try {
-      const res = await axios.get("https://fixit-app-w0dp.onrender.com/api/admin/stats");
+      const res = await axios.get(`${API_BASE_URL}/api/admin/stats`);
       if (res.data.success) {
         setStats(res.data.stats);
         setRecentBookings(res.data.recentBookings || []);
@@ -61,6 +63,7 @@ export default function AdminDashboard() {
   };
 
   return (
+    <>
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 p-6 md:p-8">
       {/* Floating Background Blobs */}
       <div className="fixed inset-0 -z-10 overflow-hidden">
@@ -347,5 +350,7 @@ export default function AdminDashboard() {
         </div>
       </div>
     </div>
+    <Footer />
+    </>
   );
 }

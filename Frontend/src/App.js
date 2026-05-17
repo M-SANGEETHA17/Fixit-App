@@ -37,6 +37,7 @@ import AdminUser from "./AdminComponent/AdminUser";
 
 import './index.css';
 import AdminQueries from "./AdminComponent/AdminQuery";
+import ViewProfile from "./UserComponent/services/ViewProfile";
 
 const PrivateRoute = ({ children }) => {
   const worker = JSON.parse(localStorage.getItem("worker"));
@@ -78,6 +79,7 @@ function Layout() {
         <Route path="/acservice" element={<ACservice />} />
         <Route path="/pestcontrol" element={<Pestcontrol />} />
         <Route path="/carpentry" element={<Carpentrywork />} />
+        <Route path="/viewprofile" element={<ViewProfile />} />
 
         <Route path="/contact" element={<Contact />} />
         <Route path="/stats" element={<StatsSection />} />

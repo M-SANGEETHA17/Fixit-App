@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { API_BASE_URL } from "../../config";
 import { 
   FaFacebookF, 
   FaInstagram, 
@@ -23,10 +24,7 @@ export default function Footer() {
   });
 
   useEffect(() => {
-    const isLocal = window.location.hostname === "localhost";
-    const apiUrl = isLocal 
-      ? "http://localhost:5005/api/settings" 
-      : "https://fixit-app-w0dp.onrender.com/api/settings";
+    const apiUrl = `${API_BASE_URL}/api/settings`;
 
     fetch(apiUrl)
       .then((res) => {

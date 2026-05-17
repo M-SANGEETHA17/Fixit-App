@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
+import { API_BASE_URL } from "../config";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   FaCheck, 
@@ -11,6 +12,7 @@ import {
   FaUserCheck,
   FaUserTimes
 } from "react-icons/fa";
+import Footer from "../UserComponent/Footer";
 
 export default function AdminRequests() {
   const [workers, setWorkers] = useState([]);     // All workers (pending + approved + rejected)
@@ -23,13 +25,13 @@ export default function AdminRequests() {
     try {
       // 👉 You need to create this backend endpoint: GET /api/workers/all
       // It should return all workers regardless of status.
-      const res = await axios.get("https://fixit-app-w0dp.onrender.com/api/workers/all");
+      const res = await axios.get(`${API_BASE_URL}/api/workers/all`);
       setWorkers(res.data.workers || []);
     } catch (err) {
       console.error("Failed to fetch workers", err);
       // Fallback: if "/all" doesn't exist, use pending only and keep existing workers
       // (but then approved workers won't appear after page refresh)
-      const pendingRes = await axios.get("https://fixit-app-w0dp.onrender.com/api/workers/pending");
+      const pendingRes = await axios.get(`${API_BASE_URL}/api/workers/pending`);
       setWorkers(prev => {
         const merged = [...prev];
         for (const pending of pendingRes.data.workers || []) {
@@ -45,7 +47,7 @@ export default function AdminRequests() {
   // Fetch all bookings (keep as is)
   const fetchBookings = async () => {
     try {
-      const res = await axios.get("https://fixit-app-w0dp.onrender.com/api/bookings");
+      const res = await axios.get(`${API_BASE_URL}/api/bookings`);
       setBookings(res.data.bookings || []);
     } catch (err) {
       console.log(err);
@@ -80,7 +82,7 @@ export default function AdminRequests() {
     );
 
     try {
-      await axios.put(`https://fixit-app-w0dp.onrender.com/api/workers/approve/${id}`);
+      await axios.put(`${API_BASE_URL}/api/workers/approve/${id}`);
       // ✅ Refresh from backend – but because we use /all, the worker remains
       await fetchAllWorkers();
     } catch (err) {
@@ -107,7 +109,7 @@ export default function AdminRequests() {
     );
 
     try {
-      await axios.put(`https://fixit-app-w0dp.onrender.com/api/workers/reject/${id}`);
+      await axios.put(`${API_BASE_URL}/api/workers/reject/${id}`);
       await fetchAllWorkers();
     } catch (err) {
       console.error(err);
@@ -133,7 +135,7 @@ export default function AdminRequests() {
     );
 
     try {
-      await axios.put(`https://fixit-app-w0dp.onrender.com/api/bookings/accept/${id}`);
+      await axios.put(`${API_BASE_URL}/api/bookings/accept/${id}`);
       await fetchBookings();
     } catch (err) {
       console.error(err);
@@ -159,7 +161,7 @@ export default function AdminRequests() {
     );
 
     try {
-      await axios.put(`https://fixit-app-w0dp.onrender.com/api/bookings/reject/${id}`);
+      await axios.put(`${API_BASE_URL}/api/bookings/reject/${id}`);
       await fetchBookings();
     } catch (err) {
       console.error(err);
@@ -178,6 +180,7 @@ export default function AdminRequests() {
   const pendingBookingsCount = bookings.filter(b => b.status === "Pending").length;
 
   return (
+    <>
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 p-4 md:p-8 font-sans">
       {/* ... same background decorations ... */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
@@ -398,14 +401,25 @@ export default function AdminRequests() {
                               </span>
                             </td>
 <td className="p-4 text-gray-600">
-  <a
-    href={`https://www.google.com/maps?q=${booking.location}`}
-    target="_blank"
-    rel="noopener noreferrer"
-    className="bg-blue-500 text-white px-3 py-1 rounded-lg text-sm hover:bg-blue-600 inline-block"
-  >
-     Open Map
-  </a>
+  {(() => {
+    const hasGeo = booking.geoLocation && booking.geoLocation.lat && booking.geoLocation.lng;
+    const query = hasGeo 
+      ? `${booking.geoLocation.lat},${booking.geoLocation.lng}` 
+      : booking.location;
+    
+    console.log(`🗺️ [Map Render] Admin Table Row -> ID: ${booking._id} | Using Exact GPS: ${!!hasGeo} | Coords: ${query}`);
+    
+    return (
+      <a
+        href={`https://www.google.com/maps?q=${encodeURIComponent(query)}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="bg-blue-500 text-white px-3 py-1 rounded-lg text-sm hover:bg-blue-600 inline-block"
+      >
+         Open Map
+      </a>
+    );
+  })()}
 </td>                            <td className="p-4">
                               <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium
                                 ${booking.status === "Accepted" ? "bg-green-100 text-green-700" : 
@@ -466,5 +480,7 @@ export default function AdminRequests() {
         </div>
       </div>
     </div>
+    <Footer />
+    </>
   );
 }

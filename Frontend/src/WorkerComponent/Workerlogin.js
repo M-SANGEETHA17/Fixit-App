@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { FaTools } from "react-icons/fa";
 import { motion } from "framer-motion";
 import axios from "axios";
+import { API_BASE_URL } from "../config";
 
 export default function WorkerLogin() {
   const [email, setEmail] = useState("");
@@ -17,7 +18,7 @@ export default function WorkerLogin() {
 
     try {
       const res = await axios.post(
-        "https://fixit-app-w0dp.onrender.com/api/workers/login",
+        `${API_BASE_URL}/api/workers/login`,
         { email, password }
       );
 

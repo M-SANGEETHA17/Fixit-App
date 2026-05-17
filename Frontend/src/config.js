@@ -24,7 +24,7 @@ const getBaseUrl = () => {
     //
     // To prevent the app from breaking when the local backend is offline, 
     // we default to the working Production database.
-    const useLocalBackend = false; // Change to true if running server.js locally
+    const useLocalBackend = true; // Change to true if running server.js locally
 
     if (useLocalBackend) {
       console.log("API Config: Web Localhost - Using Local Backend (Port 5005)");

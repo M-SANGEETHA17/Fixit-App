@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { FaUserShield, FaLock } from "react-icons/fa";
 import { motion } from "framer-motion";
+import Footer from "../UserComponent/Footer";
 
 export default function AdminLogin() {
   const navigate = useNavigate();
@@ -19,6 +20,7 @@ export default function AdminLogin() {
   };
 
   return (
+    <>
 <div className="min-h-[calc(100vh-80px)] flex bg-gradient-to-br from-green-200 via-white to-green-100">
       <div className="hidden md:flex w-1/2 items-center justify-center bg-green-100">
         <div className="text-center px-6">
@@ -107,5 +109,7 @@ export default function AdminLogin() {
       </div>
 
     </div>
+    <Footer />
+    </>
   );
 }

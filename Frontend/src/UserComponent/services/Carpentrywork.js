@@ -1,8 +1,10 @@
 import UnifiedService from "./UnifiedService";
+import Footer from "../Footer";
 
 export default function CarpentryService() {
   return (
-    <UnifiedService
+    <div>
+      <UnifiedService
       serviceName="Carpentry"
       title="Carpentry Work"
       subtitle="Professional Carpentry & Wood Services"
@@ -14,5 +16,8 @@ export default function CarpentryService() {
         "Modular Kitchen"
       ]}
     />
+<Footer/>
+    </div>
+    
   );
 }

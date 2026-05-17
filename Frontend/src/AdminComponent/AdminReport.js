@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import axios from "axios";
+import { API_BASE_URL } from "../config";
 import {
   FaFileAlt,
   FaUsers,
@@ -14,6 +15,7 @@ import {
   FaTools,
   FaUserTie
 } from "react-icons/fa";
+import Footer from "../UserComponent/Footer";
 
 export default function AdminReport() {
   const [stats, setStats] = useState({
@@ -48,7 +50,7 @@ export default function AdminReport() {
 
   const fetchReportData = async () => {
     try {
-      const statsRes = await axios.get("https://fixit-app-w0dp.onrender.com/api/admin/stats");
+      const statsRes = await axios.get(`${API_BASE_URL}/api/admin/stats`);
       if (statsRes.data.success) {
         setStats(statsRes.data.stats);
         const mappedServices = (statsRes.data.topServices || []).map(s => ({
@@ -58,7 +60,7 @@ export default function AdminReport() {
         setTopServices(mappedServices);
       }
 
-      const bookingsRes = await axios.get("https://fixit-app-w0dp.onrender.com/api/bookings");
+      const bookingsRes = await axios.get(`${API_BASE_URL}/api/bookings`);
       if (bookingsRes.data.success) {
         setRecentBookings(bookingsRes.data.bookings || []);
       }
@@ -74,6 +76,7 @@ export default function AdminReport() {
   }, []);
 
   return (
+    <>
 <div
   id="report-content"
   className="min-h-screen bg-gradient-to-br from-green-100 via-white to-emerald-100 p-4 md:p-8"
@@ -266,5 +269,7 @@ export default function AdminReport() {
       </div>
      
     </div>
+    <Footer />
+    </>
   );
 }

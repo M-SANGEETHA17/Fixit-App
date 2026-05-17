@@ -1,7 +1,9 @@
 import UnifiedService from "./UnifiedService";
+import Footer from "../Footer";
 
 export default function HomeCleaning() {
   return (
+    <div>
     <UnifiedService
       serviceName="Home Cleaning"
       title="Home Cleaning"
@@ -13,6 +15,7 @@ export default function HomeCleaning() {
         "Bathroom Deep Cleaning",
         "Sofa/Carpet Cleaning"
       ]}
-    />
+    /><Footer/>
+    </div>
   );
 }

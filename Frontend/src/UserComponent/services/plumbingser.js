@@ -1,7 +1,9 @@
 import UnifiedService from "./UnifiedService";
+import Footer from "../Footer";
 
 export default function PlumbingService() {
   return (
+    <div>
     <UnifiedService
       serviceName="Plumbing"
       title="Plumbing Service"
@@ -13,6 +15,7 @@ export default function PlumbingService() {
         "Bathroom Fitting",
         "Water Tank Cleaning"
       ]}
-    />
+    /><Footer/>
+    </div>
   );
 }

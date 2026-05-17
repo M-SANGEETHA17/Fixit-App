@@ -1,7 +1,9 @@
 import UnifiedService from "./UnifiedService";
+import Footer from "../Footer";
 
 export default function PestControlService() {
   return (
+    <div>
     <UnifiedService
       serviceName="Pest Control"
       title="Pest Control"
@@ -13,6 +15,7 @@ export default function PestControlService() {
         "Cockroach Control",
         "Rodent Control"
       ]}
-    />
+    /><Footer/>
+    </div>
   );
 }

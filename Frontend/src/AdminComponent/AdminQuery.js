@@ -1,14 +1,10 @@
 import { motion } from "framer-motion";
 import { FaSearch, FaComments } from "react-icons/fa";
 import { useState, useEffect } from "react";
+import { API_BASE_URL } from "../config";
+import Footer from "../UserComponent/Footer";
 
-const isLocal =
-  window.location.hostname === "localhost" ||
-  window.location.hostname === "127.0.0.1";
-
-const baseUrl = isLocal
-  ? "http://localhost:5005"
-  : "https://fixit-app-w0dp.onrender.com";
+const baseUrl = API_BASE_URL;
 
 export default function AdminQueries() {
   const [queries, setQueries] = useState([]);
@@ -53,6 +49,7 @@ export default function AdminQueries() {
   );
 
   return (
+    <>
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50 p-6">
       <div className="max-w-7xl mx-auto">
 
@@ -180,5 +177,7 @@ export default function AdminQueries() {
         </motion.div>
       </div>
     </div>
+    <Footer />
+    </>
   );
 }

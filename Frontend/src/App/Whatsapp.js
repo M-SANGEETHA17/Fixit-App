@@ -1,4 +1,4 @@
-export const sendWhatsAppMessage = (phone, userName, service) => {
+export const sendWhatsAppMessage = (phone, userName, service, date, time, location) => {
   console.log("Received phone:", phone);
   const safePhone = phone?.toString().replace(/\D/g, "");
   if (!safePhone) {
@@ -11,7 +11,7 @@ export const sendWhatsAppMessage = (phone, userName, service) => {
     alert("Invalid phone number format");
     return;
   }
-  const message = `New Booking Alert!\n${userName} has requested your ${service} service.\nPlease respond quickly!`;
+  const message = `New Booking Alert!\n${userName} has requested your ${service} service.\nDate: ${date}\nTime: ${time}\nLocation: ${location || "Not specified"}\nPlease respond quickly!`;
   const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
   window.location.href = url;
 };

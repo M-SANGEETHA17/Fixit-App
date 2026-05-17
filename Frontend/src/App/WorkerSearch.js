@@ -35,6 +35,7 @@ export default function WorkerSearch({
   const [searched, setSearched] = useState(false);
   const [viewMode, setViewMode] = useState("table");
   const [locating, setLocating] = useState(false);
+  const [searchingMap, setSearchingMap] = useState(false);
 
   const recentSearches = [
     `${serviceName} in madurai`,
@@ -66,54 +67,77 @@ export default function WorkerSearch({
     const baseUrl = API_BASE_URL;
 
     try {
-    
       let dbWorkers = [];
+      
+      // STEP 1: Instant DB query
       try {
         const dbRes = await axios.get(
           `${baseUrl}/api/workers/search?service=${encodeURIComponent(service)}&city=${encodeURIComponent(city)}`
         );
         if (dbRes.data.success && Array.isArray(dbRes.data.workers)) {
-            dbWorkers = dbRes.data.workers.map(w => ({
-              _id: w._id,
-              name: w.name,
-              email: w.email,
-              phone: w.phone || "Not available",
-              location: w.location || "Not specified",
-              service: w.service || service,
-              rating: "5.0",
-              verified: true,
-              isDbWorker: true,
-            }));
+          dbWorkers = dbRes.data.workers.map(w => ({
+            _id: w._id,
+            name: w.name,
+            email: w.email,
+            phone: w.phone || "Not available",
+            location: w.location || "Not specified",
+            service: w.service || service,
+            rating: "5.0",
+            verified: true,
+            isDbWorker: true,
+          }));
         }
       } catch (dbErr) {
         console.error("DB Workers Search Error:", dbErr);
       }
 
-      let mapWorkers = [];
-      try {
-        const res = await axios.get(
-          `${baseUrl}/api/fetch?service=${encodeURIComponent(service)}&city=${encodeURIComponent(city)}`
-        );
-        if (res.data.success && Array.isArray(res.data.data)) {
-          mapWorkers = res.data.data.map(business => ({
-            _id: business.placeId || business.id || Math.random().toString(),
-            name: business.title || business.name || "Unknown",
-            phone: business.phone || "Not available",
-            location: business.address || "Not specified",
-            service: service,
-            rating: business.rating || "N/A",
-            verified: true,
-          }));
-        }
-      } catch (mapErr) {
-        console.error("Apify Fetch Error:", mapErr);
-      }
+      // Show DB results instantly and shut down the primary blocking loader spinner!
+      setResults(dbWorkers);
+      setLoading(false);
 
-      setResults([...dbWorkers, ...mapWorkers]);
+      // STEP 2: Background asynchronous Map/Apify Fetch (Does not block the UI!)
+      console.log("📡 Initiating background query for dynamic Map shops...");
+      setSearchingMap(true);
+      
+      // Dispatch as an independent async task so search finishes immediately
+      (async () => {
+        try {
+          const res = await axios.get(
+            `${baseUrl}/api/fetch?service=${encodeURIComponent(service)}&city=${encodeURIComponent(city)}`,
+            { timeout: 30000 } // 30s background buffer so it never gets canceled prematurely
+          );
+          
+          if (res.data.success && Array.isArray(res.data.data)) {
+            const mapWorkers = res.data.data.map(business => ({
+              _id: business.placeId || business.id || `map_${Math.random()}`,
+              name: business.title || business.name || "Unknown Shop",
+              phone: business.phone || "Not available",
+              location: business.address || "Not specified",
+              service: service,
+              rating: business.rating || "4.5",
+              verified: true,
+              isMapWorker: true
+            }));
+            
+            console.log(`✅ Background fetch resolved. Appending ${mapWorkers.length} external shops.`);
+            // Smoothly append new map shops to existing db results
+            setResults(prev => {
+              // Remove duplicates based on ID or Name
+              const existingIds = new Set(prev.map(p => p._id));
+              const uniqueMapWorkers = mapWorkers.filter(mw => !existingIds.has(mw._id));
+              return [...prev, ...uniqueMapWorkers];
+            });
+          }
+        } catch (mapErr) {
+          console.warn("⚠️ Background Map Fetch silently failed (expected on slow connections):", mapErr.message);
+        } finally {
+          setSearchingMap(false);
+        }
+      })();
+
     } catch (err) {
       console.error("Search Error:", err);
       setResults([]);
-    } finally {
       setLoading(false);
     }
   };
@@ -184,25 +208,162 @@ export default function WorkerSearch({
   const handleLocationSearch = async () => {
     setLocating(true);
     let latitude, longitude;
+    let permissionBlocked = false;
 
     try {
-      await Geolocation.requestPermissions();
-      const position = await Geolocation.getCurrentPosition({
-        enableHighAccuracy: true,
-        timeout: 10000
-      });
-      if (position && position.coords) {
-        latitude = position.coords.latitude;
-        longitude = position.coords.longitude;
-        console.log("Search: Capacitor coords fetched:", latitude, longitude);
+      const isNative = window.Capacitor?.isNativePlatform?.();
+      if (isNative) {
+        try {
+          await Geolocation.requestPermissions();
+          const position = await Geolocation.getCurrentPosition({
+            enableHighAccuracy: true,
+            timeout: 15000
+          });
+          if (position && position.coords) {
+            latitude = position.coords.latitude;
+            longitude = position.coords.longitude;
+            console.log("📍 [Search GPS] Capacitor Native Coordinates Locked:", latitude, longitude);
+          }
+        } catch (capErr) {
+          console.warn("⚠️ [Search GPS] Capacitor Native Geolocation error:", capErr);
+        }
       }
-    } catch (capErr) {
-      console.log("Search: Running on Web browser, using IP Geolocation.");
+
+      // WEBSITE BROWSER GPS - Fallback if not native or Capacitor failed
+      if (latitude === undefined && longitude === undefined) {
+        if (!navigator.geolocation) {
+          console.error("❌ [Search GPS] Navigator.geolocation UNSUPPORTED on HTTP origin.");
+        } else {
+          const getWebPosition = (options) =>
+            new Promise((resolve, reject) => {
+              navigator.geolocation.getCurrentPosition(resolve, reject, options);
+            });
+
+          try {
+            console.log("📡 [Search GPS] Attempt 1: Requesting fresh High-Accuracy coordinates...");
+            const position = await getWebPosition({
+              enableHighAccuracy: true,
+              timeout: 8000,
+              maximumAge: 0
+            });
+            if (position && position.coords) {
+              latitude = position.coords.latitude;
+              longitude = position.coords.longitude;
+              console.log("🟢 [Search GPS] Web High-Accuracy coordinates loaded.");
+            }
+          } catch (err) {
+            console.error("⚠️ [Search GPS] High-accuracy query failed. Code:", err.code);
+            if (err.code === 1) {
+              console.error("🛑 [Search GPS] User blocked permission.");
+              permissionBlocked = true;
+            } else {
+              try {
+                console.log("📡 [Search GPS] Attempt 2: Pulling OS-Cached coordinates for immediate response...");
+                const position = await getWebPosition({
+                  enableHighAccuracy: false,
+                  timeout: 5000,
+                  maximumAge: 600000
+                });
+                if (position && position.coords) {
+                  latitude = position.coords.latitude;
+                  longitude = position.coords.longitude;
+                  console.log("🟢 [Search GPS] OS-Cached coordinates loaded.");
+                }
+              } catch (err2) {
+                console.warn("⚠️ [Search GPS] OS-Cached fallback failed. Code:", err2.code);
+                if (err2.code === 1) {
+                  permissionBlocked = true;
+                } else {
+                  try {
+                    console.log("📡 [Search GPS] Attempt 3: Native Browser Default query...");
+                    const position = await getWebPosition({ timeout: 8000 });
+                    if (position && position.coords) {
+                      latitude = position.coords.latitude;
+                      longitude = position.coords.longitude;
+                      console.log("🟢 [Search GPS] Native default coordinates loaded.");
+                    }
+                  } catch (err3) {
+                    console.error("❌ [Search GPS] All GPS pathways failed. Code:", err3.code);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error("🚨 [Search GPS] Critical Flow crash:", err);
+    }
+
+    if (permissionBlocked) {
+      console.warn("🛑 Stopping search fallback. Permission blocked by browser user.");
+      setLocating(false);
+      return;
     }
 
     if (latitude !== undefined && longitude !== undefined) {
+      console.group("🎯 [Search GPS] Core Search Parameters Loaded!");
+      console.log("Latitude:", latitude);
+      console.log("Longitude:", longitude);
+      console.groupEnd();
       await fetchAddressAndSearch(latitude, longitude);
     } else {
+      // Profile Fallback Strategy for Search
+      let profileResolved = false;
+      try {
+        const storedUserStr = localStorage.getItem("user");
+        if (storedUserStr) {
+          const storedUser = JSON.parse(storedUserStr);
+          if (storedUser && storedUser.address) {
+            console.group("✅ [Search Fallback] Extracting City from Profile");
+            const fullAddress = storedUser.address.toLowerCase();
+            let parsedCity = "";
+            
+            // 1. Check for common Tamil Nadu service regions in user profile
+            if (fullAddress.includes("tirunelveli")) parsedCity = "Tirunelveli";
+            else if (fullAddress.includes("madurai")) parsedCity = "Madurai";
+            else if (fullAddress.includes("coimbatore")) parsedCity = "Coimbatore";
+            else if (fullAddress.includes("chennai")) parsedCity = "Chennai";
+            else if (fullAddress.includes("trichy") || fullAddress.includes("tiruchirappalli")) parsedCity = "Trichy";
+            else {
+              // 2. Fallback: Split by comma and extract the city segment (typically 2nd to last or last)
+              const parts = storedUser.address.split(",").map(p => p.trim()).filter(Boolean);
+              if (parts.length >= 2) {
+                // Check if last part is state (e.g., Tamil Nadu) or pincode
+                const lastPart = parts[parts.length - 1];
+                if (/^\d+$/.test(lastPart) || lastPart.toLowerCase().includes("tamil") || lastPart.toLowerCase().includes("india")) {
+                  parsedCity = parts[parts.length - 2] || parts[0];
+                } else {
+                  parsedCity = lastPart;
+                }
+              } else if (parts.length === 1) {
+                parsedCity = parts[0];
+              }
+            }
+            
+            console.log("Profile Address:", storedUser.address);
+            console.log("Parsed Search City:", parsedCity);
+            console.groupEnd();
+            
+            if (parsedCity) {
+              const finalQuery = `${serviceName} in ${parsedCity}`;
+              setQuery(finalQuery);
+              console.log("🚀 Triggering profile-autosearch for:", finalQuery);
+              searchWorkersWithQuery(finalQuery);
+              profileResolved = true;
+            }
+          }
+        }
+      } catch (profErr) {
+        console.warn("⚠️ Unable to extract search city from user profile.", profErr);
+      }
+
+      if (profileResolved) {
+        setLocating(false);
+        return;
+      }
+
+      console.warn("⚠️ [Search GPS] Signal lost and no profile address found. Running high-accuracy IP mapping...");
       await fetchLocationViaIP();
     }
   };
@@ -212,72 +373,95 @@ export default function WorkerSearch({
       setLocating(true);
       let data = null;
 
+      // Tier 1: High-Accuracy localized API
       try {
-        const res = await fetch("https://geolocation-db.com/json/");
+        console.log("🌐 [Search Engine] Querying ipinfo.io...");
+        const res = await fetch("https://ipinfo.io/json");
         if (res.ok) {
           const ipData = await res.json();
           if (ipData && ipData.city && ipData.city !== "Not Found") {
             data = { city: ipData.city };
+            console.log("✅ [Search Engine] ipinfo match:", data.city);
           }
         }
       } catch (err) {
-        console.log("geolocation-db.com failed, trying freeipapi...", err);
+        console.warn("⚠️ ipinfo.io failed, escalating...", err);
       }
 
+      // Tier 2: Regional matching
       if (!data || !data.city) {
         try {
-          const res = await fetch("https://freeipapi.com/api/json");
-          if (res.ok) {
-            const ipData = await res.json();
-            if (ipData && ipData.cityName) {
-              data = { city: ipData.cityName };
-            }
-          }
-        } catch (err) {
-          console.log("freeipapi.com failed, trying ipapi.co...", err);
-        }
-      }
-
-      if (!data || !data.city) {
-        try {
+          console.log("🌐 [Search Engine] Querying ipapi.co...");
           const res = await fetch("https://ipapi.co/json/");
           if (res.ok) {
             const ipData = await res.json();
             if (ipData && ipData.city) {
               data = { city: ipData.city };
+              console.log("✅ [Search Engine] ipapi match:", data.city);
             }
           }
         } catch (err) {
-          console.log("ipapi.co failed, trying ipinfo.io...", err);
+          console.warn("⚠️ ipapi.co failed, trying freeipapi...", err);
         }
       }
 
-     
+      // Tier 3: Fast Regional Cache
       if (!data || !data.city) {
         try {
-          const res = await fetch("https://ipinfo.io/json");
+          console.log("🌐 [Search Engine] Querying freeipapi.com...");
+          const res = await fetch("https://freeipapi.com/api/json");
           if (res.ok) {
             const ipData = await res.json();
-            if (ipData && ipData.city) {
-              data = { city: ipData.city };
+            if (ipData && ipData.cityName) {
+              data = { city: ipData.cityName };
+              console.log("✅ [Search Engine] freeipapi match:", data.city);
             }
           }
         } catch (err) {
-          console.log("ipinfo.io failed", err);
+          console.warn("⚠️ freeipapi.com failed, trying geolocation-db...", err);
+        }
+      }
+
+      // Tier 4: Last resort broad gateway
+      if (!data || !data.city) {
+        try {
+          console.log("🌐 [Search Engine] Querying geolocation-db.com...");
+          const res = await fetch("https://geolocation-db.com/json/");
+          if (res.ok) {
+            const ipData = await res.json();
+            if (ipData && ipData.city && ipData.city !== "Not Found") {
+              data = { city: ipData.city };
+              console.log("✅ [Search Engine] Last resort match:", data.city);
+            }
+          }
+        } catch (err) {
+          console.error("❌ [Search Engine] Entire fallback failed.", err);
         }
       }
 
       if (data && data.city) {
         let city = data.city;
         city = city.replace(/\s+District$/i, "").replace(/\s+County$/i, "").trim();
+        
+        // Detect and reject broad routing hubs to prevent incorrect automated searches
+        const lowerCity = city.toLowerCase();
+        if (lowerCity.includes("chennai") || lowerCity.includes("bangalore") || lowerCity.includes("bengaluru")) {
+          console.warn("⚠️ [Search Engine] Filtered inaccurate broadband hub:", city);
+          // Set partial query so they can just type the correct city name
+          setQuery(`${serviceName} in `);
+          return;
+        }
+
         const newQuery = `${serviceName} in ${city}`;
         setQuery(newQuery);
         searchWorkersWithQuery(newQuery);
       } else {
-        alert("Could not retrieve your location automatically. Please select from the Quick Select City list below.");
+        console.warn("⚠️ Could not retrieve location automatically.");
+        setQuery(`${serviceName} in `);
       }
     } catch (err) {
-      alert("Could not retrieve your location automatically. Please select from the Quick Select City list below.");
+      console.error("❌ Error during search location fetch:", err);
+      setQuery(`${serviceName} in `);
     } finally {
       setLocating(false);
     }
@@ -392,6 +576,12 @@ export default function WorkerSearch({
 
         {/* RESULTS */}
         <div className="p-6 max-h-[65vh] overflow-y-auto">
+          {searchingMap && (
+            <div className="mb-4 bg-emerald-50 border border-emerald-100 rounded-xl p-3.5 flex items-center justify-center gap-3 text-emerald-700 animate-pulse text-sm font-medium shadow-sm">
+              <FaSpinner className="animate-spin text-emerald-600" />
+              <span>📍 Connecting to live Google/OpenStreetMap to search for all local shops...</span>
+            </div>
+          )}
           {loading ? (
             <div className="text-center py-20">
               <FaSpinner className="animate-spin text-4xl text-emerald-500 mx-auto mb-3" />
@@ -425,12 +615,21 @@ export default function WorkerSearch({
                           </div>
 
                           <div>
-                            <p className="font-semibold flex items-center gap-1">
-                              {worker.name}
-                              {worker.verified && (
-                                <MdOutlineVerified className="text-emerald-500" />
-                              )}
-                            </p>
+                            <div className="flex items-center gap-2">
+                              <p className="font-semibold flex items-center gap-1">
+                                {worker.name}
+                                {worker.verified && (
+                                  <MdOutlineVerified className="text-emerald-500" />
+                                )}
+                              </p>
+                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${
+                                worker.isOnline === true 
+                                  ? "bg-green-50 text-green-600 border-green-200" 
+                                  : "bg-red-50 text-red-500 border-red-200"
+                              }`}>
+                                {worker.isOnline === true ? "🟢 Online" : "🔴 Offline"}
+                              </span>
+                            </div>
                           </div>
                         </div>
                       </td>
@@ -528,7 +727,16 @@ export default function WorkerSearch({
 
                     <div>
                       <h3 className="font-semibold">{worker.name}</h3>
-                      <p className="text-sm text-gray-500">{worker.service}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <p className="text-sm text-gray-500">{worker.service}</p>
+                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${
+                          worker.isOnline === true 
+                            ? "bg-green-50 text-green-600 border-green-200" 
+                            : "bg-red-50 text-red-500 border-red-200"
+                        }`}>
+                          {worker.isOnline === true ? "🟢 Online" : "🔴 Offline"}
+                        </span>
+                      </div>
                     </div>
                   </div>
 

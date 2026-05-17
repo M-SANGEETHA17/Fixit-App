@@ -1,7 +1,11 @@
 import UnifiedService from "./UnifiedService";
+import Footer from "../Footer";
 
 export default function ElectricalRepair() {
   return (
+    <div>
+
+   
     <UnifiedService
       serviceName="Electrical Repair"
       title="Electrical Repair"
@@ -13,6 +17,7 @@ export default function ElectricalRepair() {
         "House Wiring",
         "Switchboard Repair"
       ]}
-    />
+    /><Footer/>
+    </div>
   );
 }

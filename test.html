@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Test API</title>
+</head>
+<body>
+  <h2>Testing API Workers List</h2>
+  <pre id="out">Loading...</pre>
+  <script>
+    async function run() {
+      const out = document.getElementById('out');
+      try {
+        out.textContent += "\nFetching from Render backend...";
+        const r1 = await fetch('https://fixit-app-w0dp.onrender.com/api/workers/all');
+        const d1 = await r1.json();
+        out.textContent += "\nRender count: " + (d1.workers ? d1.workers.length : 'undefined');
+        out.textContent += "\nData:\n" + JSON.stringify(d1.workers, null, 2);
+      } catch(e) {
+        out.textContent += "\nRender fetch failed: " + e.message;
+      }
+      
+      try {
+        out.textContent += "\n\nFetching from Localhost:5005...";
+        const r2 = await fetch('http://localhost:5005/api/workers/all');
+        const d2 = await r2.json();
+        out.textContent += "\nLocal count: " + (d2.workers ? d2.workers.length : 'undefined');
+        out.textContent += "\nData:\n" + JSON.stringify(d2.workers, null, 2);
+      } catch(e) {
+        out.textContent += "\nLocal fetch failed (server may not be running): " + e.message;
+      }
+    }
+    run();
+  </script>
+</body>
+</html>

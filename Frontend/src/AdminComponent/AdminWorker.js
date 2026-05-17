@@ -2,9 +2,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import { FaUserTie, FaPhone, FaTools, FaPlus, FaSearch, FaTimes, FaUsers, FaUserCheck, FaUserClock, FaStar, FaRegSmile, FaTrashAlt, FaEdit, FaMapMarkerAlt } from "react-icons/fa";
 import { useState, useEffect } from "react";
 import axios from "axios";
+import { API_BASE_URL } from "../config";
+import Footer from "../UserComponent/Footer";
 
-const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-const baseUrl = isLocal ? "http://localhost:5005" : "https://fixit-app-w0dp.onrender.com";
+const baseUrl = API_BASE_URL;
 
 export default function AdminWorker() {
   const [workers, setWorkers] = useState([]);
@@ -206,6 +207,7 @@ export default function AdminWorker() {
   };
 
   return (
+    <>
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50/30 to-cyan-50 relative overflow-hidden">
       <div className="absolute top-0 left-0 w-96 h-96 bg-emerald-300/20 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2 animate-pulse" />
       <div className="absolute bottom-0 right-0 w-96 h-96 bg-teal-300/20 rounded-full blur-3xl translate-x-1/2 translate-y-1/2 animate-pulse delay-1000" />
@@ -676,5 +678,7 @@ export default function AdminWorker() {
         )}
       </AnimatePresence>
     </div>
+    <Footer />
+    </>
   );
 }

@@ -10,14 +10,10 @@ import {
 } from "react-icons/fa";
 import { useState, useEffect } from "react";
 import axios from "axios";
+import { API_BASE_URL } from "../config";
+import Footer from "../UserComponent/Footer";
 
-const isLocal =
-  window.location.hostname === "localhost" ||
-  window.location.hostname === "127.0.0.1";
-
-const baseUrl = isLocal
-  ? "http://localhost:5005"
-  : "https://fixit-app-w0dp.onrender.com";
+const baseUrl = API_BASE_URL;
 
 export default function AdminUser() {
   const [users, setUsers] = useState([]);
@@ -113,6 +109,7 @@ export default function AdminUser() {
   };
 
   return (
+    <>
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 overflow-hidden relative">
       {/* Background Blur */}
       <div className="absolute top-0 left-0 w-72 sm:w-96 h-72 sm:h-96 bg-emerald-300/10 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2 animate-pulse" />
@@ -490,5 +487,7 @@ export default function AdminUser() {
         </div>
       </div>
     </div>
+    <Footer />
+    </>
   );
 }

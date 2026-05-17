@@ -4,7 +4,6 @@ import { useNavigate } from "react-router-dom";
 import { sendWhatsAppMessage } from "../../App/Whatsapp";
 import { handleBookingAndNotify } from "../../App/Message";
 import WorkerSearch from "../../App/WorkerSearch";
-import { Geolocation } from "@capacitor/geolocation";
 import { motion, AnimatePresence } from "framer-motion";
 import { API_BASE_URL } from "../../config";
 import {
@@ -23,10 +22,11 @@ import {
   FaStarHalfAlt,
   FaQuoteLeft,
   FaCalendarAlt,
-  FaUserCircle
+  FaUserCircle,
+  FaCommentDots,
+ 
 } from "react-icons/fa";
 import { MdOutlineVerified } from "react-icons/md";
-
 export default function UnifiedService({
   serviceName,
   subtitle,
@@ -38,11 +38,12 @@ export default function UnifiedService({
   const [selected, setSelected] = useState(null);
   const [loadingWorkers, setLoadingWorkers] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-
+  const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [serviceType, setServiceType] = useState("");
-
+  const [bookingDate, setBookingDate] = useState("");
+  const [bookingTime, setBookingTime] = useState("");
   const [location, setLocation] = useState(() => {
     try {
       const saved = localStorage.getItem("userLocation");
@@ -137,34 +138,58 @@ export default function UnifiedService({
     setTimeout(() => setNotification(null), 4000);
   };
 
-  const fetchWorkers = async () => {
+  const fetchWorkers = async (retryCount = 0) => {
     const baseUrl = API_BASE_URL;
-    setLoadingWorkers(true);
+    if (retryCount === 0) setLoadingWorkers(true);
+    
     try {
-      const res = await axios.get(
-        `${baseUrl}/api/workers/by-service/${encodeURIComponent(serviceName)}`
-      );
+      const targetUrl = `${baseUrl}/api/workers/by-service/${encodeURIComponent(serviceName)}`;
+      console.log(`API Request [Try ${retryCount + 1}]:`, targetUrl);
 
-      if (res.data.success) {
-        const activeWorkers = (res.data.workers || []).filter(
+      const response = await fetch(targetUrl, {
+        method: "GET",
+        headers: {
+          "Accept": "application/json",
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server responded with status ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data && data.success) {
+        const activeWorkers = (data.workers || []).filter(
           (w) => ["active", "approved"].includes(w.status?.toLowerCase())
         );
         setWorkers(activeWorkers);
+        setLoadingWorkers(false);
       } else {
         setWorkers([]);
+        setLoadingWorkers(false);
       }
-    } catch {
-      setWorkers([]);
-      showNotification("Failed to load workers.", "error");
-    } finally {
-      setLoadingWorkers(false);
+    } catch (err) {
+      console.error(`Fetch workers error [Try ${retryCount + 1}]:`, err);
+      
+      // Render Free-tier cold start auto-retry (3 seconds delay gives it time to wake up)
+      if (retryCount < 1) {
+        showNotification("Waking up server, please wait 3 seconds...", "info");
+        setTimeout(() => fetchWorkers(retryCount + 1), 3000);
+      } else {
+        setWorkers([]);
+        setLoadingWorkers(false);
+        
+        // Expose dynamic technical details in case of local network / SSL issues
+        const errMsg = err.message || "Network Failure";
+        showNotification(`Failed to load workers: ${errMsg}`, "error");
+      }
     }
   };
 
   const filteredWorkers = useMemo(() => {
   let filtered = [...workers];
 
-  // SEARCH FILTER
   if (searchTerm.trim()) {
     const term = searchTerm.toLowerCase().trim();
 
@@ -184,8 +209,10 @@ export default function UnifiedService({
               .filter(Boolean)
               .join(" ");
 
-      return nameMatch || locStr.toLowerCase().includes(term);
-    });
+return (
+  nameMatch ||
+  (locStr || "").toLowerCase().includes(term)
+);    });
   }
 
   if (location?.locationString) {
@@ -214,12 +241,18 @@ export default function UnifiedService({
       );
     });
 
-    // UX FIX: If strict location filtering yields 0 results, fall back to showing all workers 
-    // so that the screen is not empty and unusable.
     if (locFiltered.length > 0) {
       filtered = locFiltered;
     }
   }
+
+  // Ensure Online workers are sorted to the top
+  filtered.sort((a, b) => {
+    const aOnline = a.isOnline === true;
+    const bOnline = b.isOnline === true;
+    if (aOnline === bOnline) return 0;
+    return aOnline ? -1 : 1;
+  });
 
   return filtered;
 }, [workers, searchTerm, location]);
@@ -228,278 +261,210 @@ export default function UnifiedService({
     return filteredWorkers.slice(0, visibleCount);
   }, [filteredWorkers, visibleCount]);
 
- const getCurrentLocation = async () => {
-  setLoadingLoc(true);
-
-  try {
-    const isNative = window.Capacitor?.isNativePlatform?.();
-
-    // MOBILE APP
-    if (isNative) {
-      const permission = await Geolocation.requestPermissions();
-
-      if (
-        permission.location === "granted" ||
-        permission.coarseLocation === "granted"
-      ) {
-        const position = await Geolocation.getCurrentPosition({
-          enableHighAccuracy: true,
-          timeout: 30000,
-          maximumAge: 0,
-        });
-
-        await fetchAddress(
-          position.coords.latitude,
-          position.coords.longitude
-        );
-
+  const useSavedLocation = () => {
+    try {
+      const storedUserStr = localStorage.getItem("user");
+      if (!storedUserStr) {
+        showNotification("Please Login to your account first to use this feature!", "error");
         return;
+      }
+      
+      const storedUser = JSON.parse(storedUserStr);
+      const userAddress = storedUser.address || storedUser.location;
+      
+      if (userAddress) {
+        const locationObj = {
+          lat: null,
+          lng: null,
+          locationString: userAddress,
+          link: `https://www.google.com/maps?q=${encodeURIComponent(userAddress)}`,
+        };
+        setLocation(locationObj);
+        localStorage.setItem("userLocation", JSON.stringify(locationObj));
+        showNotification("Exact location fetched from your database profile!", "success");
+      } else {
+        showNotification("No address found in your database profile.", "error");
+      }
+    } catch (err) {
+      showNotification("Error fetching saved location", "error");
+    }
+  };
+
+const getCurrentLocation = async () => {
+  try {
+    setLoadingLoc(true);
+
+    if (!navigator.geolocation) {
+      showNotification("Geolocation not supported in this browser", "error");
+      setLoadingLoc(false);
+      return;
+    }
+
+    showNotification("Fetching exact location...", "info");
+
+    const getPosition = (options) => {
+      return new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, options);
+      });
+    };
+
+    let position;
+    try {
+      position = await getPosition({ enableHighAccuracy: true, timeout: 5000, maximumAge: 0 });
+    } catch (err) {
+      if (err.code === 1) { // PERMISSION_DENIED
+        showNotification("Location permission denied. Please allow access.", "error");
+        setLoadingLoc(false);
+        return;
+      }
+      try {
+        position = await getPosition({ enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 });
+      } catch (err2) {
+        try {
+          position = await getPosition({ enableHighAccuracy: false, timeout: 2000, maximumAge: Infinity });
+        } catch (err3) {
+          try {
+            const storedUserStr = localStorage.getItem("user");
+            if (storedUserStr) {
+              const storedUser = JSON.parse(storedUserStr);
+              if (storedUser && storedUser.address) {
+                const locationObj = {
+                  lat: null,
+                  lng: null,
+                  locationString: storedUser.address,
+                  link: `https://www.google.com/maps?q=${encodeURIComponent(storedUser.address)}`,
+                };
+                setLocation(locationObj);
+                localStorage.setItem("userLocation", JSON.stringify(locationObj));
+                showNotification("Exact location fetched from profile!", "success");
+                setLoadingLoc(false);
+                return;
+              }
+            }
+          } catch (e) {
+          }
+
+          try {
+            showNotification("Using network area. (Use a phone for exact address)", "info");
+            const res = await fetch("https://ipapi.co/json/");
+            if (res.ok) {
+              const data = await res.json();
+              if (data.latitude && data.longitude) {
+                await fetchAddress(data.latitude, data.longitude);
+                return;
+              }
+            }
+          
+            const res2 = await fetch("https://ipinfo.io/json");
+            if (res2.ok) {
+              const data2 = await res2.json();
+              if (data2.loc) {
+                const [lat, lng] = data2.loc.split(',');
+                await fetchAddress(parseFloat(lat), parseFloat(lng));
+                return;
+              }
+            }
+            throw new Error("IP location failed");
+          } catch (ipErr) {
+            showNotification("Unable to fetch exact location. Enter manually.", "error");
+            setLoadingLoc(false);
+            return;
+          }
+        }
       }
     }
 
-    // WEBSITE BROWSER GPS
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          await fetchAddress(
-            position.coords.latitude,
-            position.coords.longitude
-          );
-
-          setLoadingLoc(false);
-        },
-
-        async () => {
-          await fetchLocationViaIP();
-        },
-
-        {
-          enableHighAccuracy: true,
-          timeout: 30000,
-          maximumAge: 0,
-        }
-      );
-    } else {
-      await fetchLocationViaIP();
+    if (position && position.coords) {
+      const { latitude, longitude } = position.coords;
+      await fetchAddress(latitude, longitude);
     }
   } catch (err) {
-    console.log("GPS Error:", err);
+    console.error(err);
+    showNotification("Failed to fetch current location", "error");
+    setLoadingLoc(false);
+  }
+};
 
-    await fetchLocationViaIP();
+const fetchAddress = async (lat, lng) => {
+  try {
+    const controller = new AbortController();
+
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, 10000);
+
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`,
+      {
+        signal: controller.signal,
+        headers: {
+          Accept: "application/json",
+        },
+      }
+    );
+
+    clearTimeout(timeoutId);
+
+    const data = await res.json();
+
+    if (!data || !data.address) {
+      showNotification("Address not found", "error");
+      return;
+    }
+
+    const addr = data.address;
+
+    const road = addr.road || addr.pedestrian || "";
+    const suburb = addr.suburb || addr.neighbourhood || addr.residential || "";
+    const city = addr.city || addr.town || addr.village || addr.municipality || "";
+    const postcode = addr.postcode || "";
+
+    let parts = [road, suburb, city, postcode].filter(Boolean);
+    
+    parts = [...new Set(parts)];
+    
+    const finalAddress = parts.join(", ");
+
+    const locationObj = {
+      lat,
+      lng,
+      locationString: finalAddress || data.display_name,
+      link: `https://www.google.com/maps?q=${lat},${lng}`,
+    };
+
+    setLocation(locationObj);
+
+    localStorage.setItem(
+      "userLocation",
+      JSON.stringify(locationObj)
+    );
+
+    showNotification("Current location fetched successfully!", "success");
+
+  } catch (err) {
+
+    if (err.name === "AbortError") {
+      showNotification("Address fetch timeout", "error");
+    } else {
+      showNotification("Failed to fetch address", "error");
+    }
+
+    console.error(err);
+
   } finally {
     setLoadingLoc(false);
   }
 };
-  const fetchLocationViaIP = async () => {
-    try {
-      let data = null;
-
-      try {
-        const res = await fetch("https://geolocation-db.com/json/");
-        if (res.ok) {
-          const ipData = await res.json();
-          if (ipData && ipData.city && ipData.city !== "Not Found") {
-            data = {
-              city: ipData.city,
-              region: ipData.state || "",
-              postal: ipData.postal || "",
-              latitude: ipData.latitude,
-              longitude: ipData.longitude
-            };
-          }
-        }
-      } catch (err) {
-        console.log("geolocation-db.com failed, trying freeipapi...", err);
-      }
-
-      if (!data || !data.city) {
-        try {
-          const res = await fetch("https://freeipapi.com/api/json");
-          if (res.ok) {
-            const ipData = await res.json();
-            if (ipData && ipData.cityName) {
-              data = {
-                city: ipData.cityName,
-                region: ipData.regionName,
-                postal: ipData.zipCode,
-                latitude: ipData.latitude,
-                longitude: ipData.longitude
-              };
-            }
-          }
-        } catch (err) {
-          console.log("freeipapi.com failed, trying ipapi.co...", err);
-        }
-      }
-
-      if (!data || !data.city) {
-        try {
-          const res = await fetch("https://ipapi.co/json/");
-          if (res.ok) {
-            const ipData = await res.json();
-            if (ipData && ipData.city) {
-              data = {
-                city: ipData.city,
-                region: ipData.region,
-                postal: ipData.postal,
-                latitude: ipData.latitude,
-                longitude: ipData.longitude
-              };
-            }
-          }
-        } catch (err) {
-          console.log("ipapi.co failed, trying ipinfo.io...", err);
-        }
-      }
-
-      if (!data || !data.city) {
-        try {
-          const res = await fetch("https://ipinfo.io/json");
-          if (res.ok) {
-            const ipData = await res.json();
-            if (ipData && ipData.city) {
-              const locParts = (ipData.loc || "").split(",");
-              data = {
-                city: ipData.city,
-                region: ipData.region,
-                postal: ipData.postal,
-                latitude: parseFloat(locParts[0]) || 0,
-                longitude: parseFloat(locParts[1]) || 0
-              };
-            }
-          }
-        } catch (err) {
-          console.log("ipinfo.io failed", err);
-        }
-      }
-
-      if (data && data.city) {
-        let city = data.city;
-        city = city.replace(/\s+District$/i, "").replace(/\s+County$/i, "").trim();
-        const state = data.region || "";
-        const postcode = data.postal || "";
-        const addressText = [city, state, postcode].filter(Boolean).join(", ");
-        
-        const locationObj = {
-          lat: data.latitude,
-          lng: data.longitude,
-          locationString: addressText,
-          link: `https://www.google.com/maps?q=${data.latitude},${data.longitude}`,
-        };
-
-        setLocation(locationObj);
-        localStorage.setItem("userLocation", JSON.stringify(locationObj));
-        showNotification("Location detected successfully!", "success");
-      } else {
-        showNotification("Unable to detect location automatically", "error");
-      }
-    } catch (err) {
-      showNotification("Unable to detect location automatically", "error");
-    } finally {
-      setLoadingLoc(false);
-    }
-  };
-
-  const fetchAddress = async (lat, lng) => {
-    try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
-        {
-          headers: {
-            Accept: "application/json",
-            "User-Agent": "FixIt-App/1.0"
-          }
-        }
-      );
-
-      const data = await res.json();
-      const addr = data.address || {};
-
-      const resolvedState = addr.state || "";
-      const cityVal = addr.city || addr.town || addr.village || addr.municipality || "";
-      let districtVal = addr.city_district || addr.county || addr.state_district || "";
-      if (districtVal) {
-        districtVal = districtVal.replace(/\s+District$/i, "").replace(/\s+County$/i, "").trim();
-      }
-
-      const addressParts = [];
-      const seen = new Set();
-      if (resolvedState) seen.add(resolvedState.toLowerCase());
-
-      const potentialAreas = [
-        addr.amenity,
-        addr.shop,
-        addr.building,
-        addr.house_number,
-        addr.road,
-        addr.suburb,
-        addr.neighbourhood,
-        addr.residential,
-        addr.commercial,
-        addr.subdistrict,
-        addr.locality,
-        addr.hamlet
-      ];
-
-      const uniqueAreaParts = [];
-      for (const part of potentialAreas) {
-        if (part && !seen.has(part.toLowerCase())) {
-          // Skip long connecting highway segments or hyphenated strings to keep address clean
-          if (part.includes(" - ") || part.length > 35) {
-            continue;
-          }
-          uniqueAreaParts.push(part);
-          seen.add(part.toLowerCase());
-        }
-      }
-      const resolvedArea = uniqueAreaParts.slice(0, 2).join(", ");
-      if (resolvedArea) addressParts.push(resolvedArea);
-
-      if (cityVal && !seen.has(cityVal.toLowerCase())) {
-        addressParts.push(cityVal);
-        seen.add(cityVal.toLowerCase());
-      }
-
-      if (districtVal && !seen.has(districtVal.toLowerCase())) {
-        addressParts.push(districtVal);
-        seen.add(districtVal.toLowerCase());
-      }
-
-      if (resolvedState) {
-        addressParts.push(resolvedState);
-      }
-
-      if (addr.postcode) {
-        addressParts.push(addr.postcode);
-      }
-
-      let addressText = addressParts.join(", ");
-
-      if (!addressText) {
-        addressText = data.display_name || `${lat}, ${lng}`;
-      }
-
-      const locationObj = {
-        lat,
-        lng,
-        locationString: addressText,
-        link: `https://www.google.com/maps?q=${lat},${lng}`,
-      };
-
-      setLocation(locationObj);
-      localStorage.setItem("userLocation", JSON.stringify(locationObj));
-
-      showNotification("Location detected successfully!", "success");
-    } catch (error) {
-      showNotification("Failed to fetch address", "error");
-    } finally {
-      setLoadingLoc(false);
-    }
-  };
 
   const sendOtp = async () => {
-    if (!selected || !name || !serviceType || phone.length < 10 || !location) {
+    if (!selected || !name || !serviceType || !email || !location || !bookingDate || !bookingTime) {
       showNotification("Fill all details properly", "error");
+      return;
+    }
+
+    const selectedDate = new Date(`${bookingDate}T${bookingTime}`);
+    if (selectedDate < new Date()) {
+      showNotification("Cannot select a past date or time", "error");
       return;
     }
 
@@ -510,13 +475,15 @@ export default function UnifiedService({
     try {
       const res = await axios.post(
         `${baseUrl}/api/otp/send-otp`,
-        { phone }
+        { email }
       );
 
       if (res.data.success) {
         setOtpStep(true);
         setResendCooldown(30);
         showNotification("OTP sent", "success");
+      } else {
+        showNotification(res.data.message || "Failed to send OTP", "error");
       }
     } catch {
       showNotification("OTP send failed", "error");
@@ -533,7 +500,7 @@ export default function UnifiedService({
     try {
       const res = await axios.post(
         `${baseUrl}/api/otp/verify-otp`,
-        { phone, otp }
+        { email, otp }
       );
 
       if (!res.data.success) {
@@ -546,17 +513,22 @@ export default function UnifiedService({
         phone,
         serviceType,
         location: location.locationString,
+        bookingDate,
+        bookingTime,
+        geoLocation: location.lat && location.lng ? { lat: location.lat, lng: location.lng } : undefined,
         selected,
       });
 
       if (success) {
-        sendWhatsAppMessage(selected.phone, name, serviceType);
+        sendWhatsAppMessage(selected.phone, name, serviceType, bookingDate, bookingTime, location.locationString);
 
         setOtpStep(false);
         setSelected(null);
         setName("");
         setPhone("");
         setServiceType("");
+        setBookingDate("");
+        setBookingTime("");
         setOtp("");
 
         showNotification("Booking Confirmed!", "success");
@@ -697,9 +669,10 @@ const locationAddress =
         w.location?.state,
       ]
         .filter(Boolean)
-        .join(", ") || "Local Expert";                const phoneNum = w.phone || w.mobile || "N/A";
-
-                return (
+        .join(", ") || "Local Expert";       
+        
+        const phoneNum = w.phone || w.mobile || "N/A";
+        return (
                   <motion.div
                     key={w._id}
                     onClick={() => {
@@ -722,11 +695,18 @@ const locationAddress =
                       </div>
 
                       <div className="flex-1">
-                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-3 flex-wrap">
                           <h3 className="font-bold text-base sm:text-lg text-slate-800 flex items-center gap-1.5">
                             {w.name}
                             {isSelected && <MdOutlineVerified className="text-emerald-500 text-lg" />}
                           </h3>
+                          <span className={`text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-full border shadow-sm ${
+                            w.isOnline === true 
+                              ? "bg-green-50 text-green-600 border-green-200" 
+                              : "bg-red-50 text-red-500 border-red-200"
+                          }`}>
+                            {w.isOnline === true ? "🟢 Online" : "🔴 Offline"}
+                          </span>
                         </div>
 
                         <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1 flex items-center gap-1.5">
@@ -752,16 +732,17 @@ const locationAddress =
                           }}
                           className="text-xs font-bold px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-500 hover:text-white hover:border-blue-500 transition shadow-sm flex items-center gap-1"
                         >
-                          <FaQuestionCircle /> Query
+                          <FaQuestionCircle /> Report
                         </button>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            openReviews(w);
+                            localStorage.setItem("selectedWorker", JSON.stringify(w));
+                            navigate("/viewprofile");
                           }}
-                          className="text-xs font-bold px-3 py-1.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-500 hover:text-white hover:border-amber-500 transition shadow-sm flex items-center gap-1"
+                          className="text-xs font-bold px-3 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition shadow-sm flex items-center gap-1"
                         >
-                          ⭐ Review
+                          <FaUser /> View Profile
                         </button>
                       </div>
                     </div>
@@ -830,31 +811,94 @@ const locationAddress =
               </div>
 
               <div>
+  <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+    Email Address
+  </label>
+
+  <input
+    type="email"
+    className="w-full p-3 rounded-xl border border-gray-200 outline-none"
+    placeholder="Enter your email"
+    value={email}
+    onChange={(e) => setEmail(e.target.value)}
+    disabled={otpStep}
+  />
+</div>
+
+
+
+              <div>
+  <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+     Preferred Date & Time
+  </label>
+
+  <div className="grid grid-cols-2 gap-3">
+
+    <input
+      type="date"
+      value={bookingDate}
+      onChange={(e) => setBookingDate(e.target.value)}
+      className="w-full p-3 rounded-xl border border-gray-200 outline-none"
+    />
+
+    <input
+      type="time"
+       value={bookingTime}
+    onChange={(e) => setBookingTime(e.target.value)}
+      className="w-full p-3 rounded-xl border border-gray-200 outline-none"
+    />
+
+  </div>
+</div>
+
+              <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Your Location</label>
                <div className="flex gap-2 items-center">
   <div className="relative flex-1">
     <FaMapMarkerAlt className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-500 text-base" />
 
-    <input
-      className="w-full pl-10 pr-3 p-3 rounded-xl border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-emerald-200 transition"
-      placeholder="Street / Locality address..."
-      value={location?.locationString ?? ""}
-      onChange={(e) =>
-        setLocation((prev) => ({
-          ...prev,
-          locationString: e.target.value
-        }))
-      }
-    />
+   <input
+  className="w-full pl-10 pr-3 p-3 rounded-xl border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-emerald-200 transition"
+  placeholder="Street / Locality address..."
+  list="local-areas"
+  value={location?.locationString ?? ""}
+  onChange={(e) =>
+    setLocation((prev) => ({
+      ...(prev || {}),
+      locationString: e.target.value,
+    }))
+  }
+/>
+    <datalist id="local-areas">
+      <option value="JJ Nagar, Reddiarpatti, Tirunelveli" />
+      <option value="Palayamkottai, Tirunelveli" />
+      <option value="Reddiarpatti, Tirunelveli" />
+      <option value="Vannarpettai, Tirunelveli" />
+      <option value="Tirunelveli Junction" />
+      <option value="Tirunelveli Town" />
+      <option value="Melapalayam, Tirunelveli" />
+      <option value="Pettai, Tirunelveli" />
+      <option value="Tirunelveli, Tamil Nadu" />
+      <option value="Madurai, Tamil Nadu" />
+    </datalist>
   </div>
 
-  <button
-    onClick={getCurrentLocation}
-    disabled={loadingLoc}
-    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center shrink-0 transition shadow-sm"
-  >
-    {loadingLoc ? "Loading..." : "Get Location"}
-  </button>
+  <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+    <button
+      onClick={useSavedLocation}
+      className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center transition shadow-sm whitespace-nowrap"
+      title="Fetch address from your profile"
+    >
+      Saved Loc
+    </button>
+    <button
+      onClick={getCurrentLocation}
+      disabled={loadingLoc}
+      className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center transition shadow-sm whitespace-nowrap"
+    >
+      {loadingLoc ? "..." : "Get GPS"}
+    </button>
+  </div>
 </div>
               </div>
 
@@ -926,7 +970,7 @@ const locationAddress =
         }}
         onQueryWorker={(w) => {
           setQueryForm({
-            userName: name, // use typed name if present
+            userName: name, 
             workerName: w.name || "",
             serviceCategory: w.service || serviceName || "",
             query: ""
@@ -940,7 +984,7 @@ const locationAddress =
         }}
       />
 
-      {/* Inline Query Modal */}
+      
       {showQueryPopup && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[1000] p-4 animate-fadeIn">
           <motion.div 

@@ -1,8 +1,10 @@
 import UnifiedService from "./UnifiedService";
+import Footer from "../Footer";
 
 export default function ACService() {
   return (
-    <UnifiedService
+    <div>
+      <UnifiedService
       serviceName="AC Service"
       title="AC Service"
       subtitle="Instant AC Repair & Service"
@@ -14,5 +16,8 @@ export default function ACService() {
         "AC Uninstallation"
       ]}
     />
+<Footer/>
+    </div>
+    
   );
 }
