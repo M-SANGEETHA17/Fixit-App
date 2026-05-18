@@ -547,6 +547,64 @@ const fetchAddress = async (lat, lng) => {
   }
 };
 
+
+// ─── Client-side fallback diagnosis (runs when backend is unavailable) ────────
+const CLIENT_DIAGNOSIS = [
+  { keywords: ["cockroach","pest","termite","mosquito","rodent","rat","bedbug","insect"],
+    causes: ["Food residue in cracks","Moisture near sink/pipes","Entry from neighbouring units"],
+    service: "Pest Control Service — professional treatment with gel-bait, spray, or fogging.",
+    urgency: "High" },
+  { keywords: ["fan installation"],
+    causes: ["Loose wiring connections","Faulty ceiling mount bracket","Wrong voltage supply"],
+    service: "Electrical Repair — fan installation by licensed electrician.",
+    urgency: "Medium" },
+  { keywords: ["fan"],
+    causes: ["Capacitor failure","Worn motor bearings","Loose blade screws"],
+    service: "Electrical Repair — fan capacitor/motor replacement and balancing.",
+    urgency: "Low" },
+  { keywords: ["light fitting","light","switchboard","wiring","electrical","circuit"],
+    causes: ["Loose neutral wire","Short circuit","Overloaded circuit"],
+    service: "Electrical Repair — wiring inspection, fitting replacement by certified electrician.",
+    urgency: "Medium" },
+  { keywords: ["pipe replacement","pipe","leak","plumbing","bathroom fitting","water tank","tap"],
+    causes: ["Corroded pipe joints","Worn rubber seals","High water pressure"],
+    service: "Plumbing Service — leak repair, pipe assessment, and fitting replacement.",
+    urgency: "High" },
+  { keywords: ["ac installation"],
+    causes: ["Wrong bracket placement","Refrigerant line routing issue","Drain pipe slope"],
+    service: "AC Service — professional installation with refrigerant line setup.",
+    urgency: "Low" },
+  { keywords: ["cooling","gas refill","compressor","air conditioner","ac"],
+    causes: ["Low refrigerant (gas leak)","Dirty air filter","Faulty compressor"],
+    service: "AC Service — gas top-up, filter cleaning, and compressor diagnostics.",
+    urgency: "High" },
+  { keywords: ["furniture","door","window","carpentry","woodwork","modular kitchen"],
+    causes: ["Joint separation","Moisture warping","Hinge/slider failure"],
+    service: "Carpentry Service — furniture repair, woodwork, and fixture replacement.",
+    urgency: "Low" },
+  { keywords: ["sofa","carpet","deep clean","home clean","cleaning"],
+    causes: ["Dust mite accumulation","Stain penetration","Long gap since last cleaning"],
+    service: "Cleaning Service — deep cleaning, hot-water extraction, and sanitisation.",
+    urgency: "Low" },
+];
+
+function getClientDiagnosis(issue) {
+  const lower = issue.toLowerCase();
+  for (const entry of CLIENT_DIAGNOSIS) {
+    if (entry.keywords.some((kw) => {
+      const esc = kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return new RegExp(`(?<![a-z])${esc}(?![a-z])`, "i").test(lower);
+    })) {
+      return { causes: entry.causes, service: entry.service, urgency: entry.urgency };
+    }
+  }
+  return {
+    causes: ["Wear and tear over time","Improper previous installation","Environmental factors (dust, moisture)"],
+    service: "A professional will inspect on-site and recommend the appropriate fix.",
+    urgency: "Medium",
+  };
+}
+
 const getAIDiagnosis = async () => {
   if (diagnosisLoading) return;
   if (!serviceType || serviceType.trim() === "") {
@@ -554,27 +612,32 @@ const getAIDiagnosis = async () => {
     return;
   }
 
-  try {
-    setDiagnosisLoading(true);
+  setDiagnosisLoading(true);
+  setShowDiagnosis(true); // open modal immediately with loading spinner
 
+  try {
     const res = await axios.post(
       `${API_BASE_URL}/api/diagnose`,
-      { issue: serviceType }
+      { issue: serviceType },
+      { timeout: 12000 } // 12s timeout — handles Render cold start
     );
 
-    if (res.data.success) {
+    if (res.data && res.data.success) {
       setAiDiagnosis(res.data.diagnosis);
-      setShowDiagnosis(true);
     } else {
-      showNotification("Diagnosis failed", "error");
+      // Backend returned success:false — use client fallback silently
+      setAiDiagnosis(getClientDiagnosis(serviceType));
     }
   } catch (error) {
-    console.error(error);
-    showNotification("AI diagnosis failed", "error");
+    console.warn("[Diagnosis] API unreachable, using client fallback:", error.message);
+    // Network error / 500 / timeout — use client-side fallback, NO error toast
+    setAiDiagnosis(getClientDiagnosis(serviceType));
   } finally {
     setDiagnosisLoading(false);
   }
 };
+
+
 
   const sendOtp = async () => {
     if (!selected || !name || !serviceType || !email || !location || !bookingDate || !bookingTime) {
