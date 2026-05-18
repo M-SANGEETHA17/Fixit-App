@@ -2,16 +2,15 @@ import { FaChevronLeft, FaChevronRight } from "react-icons/fa";
 import Slider from "react-slick";
 import "slick-carousel/slick/slick.css";
 import "slick-carousel/slick/slick-theme.css";
-import { useRef, useState } from "react";
-import axios from "axios";
+import { useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import Service from "./Service";
 import StatsSection from "./StatsSection";
 import Footer from "./Footer";
 
 export default function Home() {
   const sliderRef = useRef(null);
-
-  const [selectedWorker, setSelectedWorker] = useState(null);
+  const navigate = useNavigate();
 
   const settings = {
     dots: true,
@@ -24,50 +23,34 @@ export default function Home() {
     arrows: false,
   };
 
+  // Each slide has a `route` matching the App.js route path
   const slides = [
     {
       img: "https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea",
       title: "Home Cleaning",
       desc: "Professional cleaning services",
+      route: "/homecleaning",
     },
     {
       img: "https://images.unsplash.com/photo-1621905252507-b35492cc74b4",
       title: "Electrical Repair",
       desc: "Safe electrical solutions",
+      route: "/electricalrepair",
     },
     {
       img: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c",
       title: "Plumbing",
       desc: "Quick plumbing fixes",
+      route: "/plumbing",
     },
     {
       img: "https://images.unsplash.com/photo-1581578731548-c64695cc6952",
       title: "AC Repair",
       desc: "Cool service experts",
+      route: "/acservice",
     },
   ];
 
-  const handleBook = async (service) => {
-  if (!selectedWorker) {
-    alert("Please select a worker first");
-    return;
-  }
-
-  try {
-    await axios.post("https://fixit-app-w0dp.onrender.com/api/bookings/create", {
-      name: "Guest User", 
-      phone: "0000000000",
-      serviceType: service,
-      location: "Not Provided",
-      workerId: selectedWorker._id
-    });
-
-    alert("Booking added successfully");
-  } catch (err) {
-    console.log(err);
-    alert("Booking failed");
-  }
-};
   return (
     <div className="w-full min-h-screen overflow-x-hidden relative">
       <div className="relative w-full h-screen">
@@ -104,8 +87,8 @@ export default function Home() {
                 <p className="mt-2">{s.desc}</p>
 
                 <button
-                  onClick={() => handleBook(s.title)}
-                  className="mt-5 bg-green-500 px-6 py-3 rounded-lg"
+                  onClick={() => navigate(s.route)}
+                  className="mt-5 bg-green-500 hover:bg-green-600 transition px-6 py-3 rounded-lg font-semibold"
                 >
                   Book Service
                 </button>
@@ -123,4 +106,4 @@ export default function Home() {
 
     </div>
   );
-}
+}

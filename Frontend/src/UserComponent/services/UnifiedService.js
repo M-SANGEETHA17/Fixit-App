@@ -27,6 +27,7 @@ import {
   FaLightbulb,
   FaTools,
   FaChevronDown,
+  FaMicrophone,
 } from "react-icons/fa";
 import { MdOutlineVerified } from "react-icons/md";
 
@@ -160,7 +161,47 @@ export default function UnifiedService({
   const [showDiagnosis, setShowDiagnosis] = useState(false);
   const [aiDiagnosis, setAiDiagnosis] = useState(null);
 const [diagnosisLoading, setDiagnosisLoading] = useState(false);
+  const [showServiceDropdown, setShowServiceDropdown] = useState(false);
   const [showQueryPopup, setShowQueryPopup] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+
+  const startListening = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      showNotification("Your browser does not support Speech Recognition. Please try Chrome or Edge.", "error");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.lang = "en-IN";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      setIsListening(true);
+      showNotification("Listening... Speak your issue now.", "success");
+    };
+
+    recognition.onresult = (event) => {
+      const speechToText = event.results[0][0].transcript;
+      console.log("[SpeechRecognition] result:", speechToText);
+      setServiceType(speechToText);
+      showNotification(`Recognized: "${speechToText}"`, "success");
+    };
+
+    recognition.onerror = (event) => {
+      console.error("[SpeechRecognition] error:", event.error);
+      setIsListening(false);
+      showNotification(`Speech recognition error: ${event.error}`, "error");
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognition.start();
+  };
   const [queryForm, setQueryForm] = useState({
     userName: "",
     workerName: "",
@@ -548,7 +589,6 @@ const fetchAddress = async (lat, lng) => {
 };
 
 
-// ─── Client-side fallback diagnosis (runs when backend is unavailable) ────────
 const CLIENT_DIAGNOSIS = [
   { keywords: ["cockroach","pest","termite","mosquito","rodent","rat","bedbug","insect"],
     causes: ["Food residue in cracks","Moisture near sink/pipes","Entry from neighbouring units"],
@@ -615,22 +655,28 @@ const getAIDiagnosis = async () => {
   setDiagnosisLoading(true);
   setShowDiagnosis(true); // open modal immediately with loading spinner
 
+  const targetUrl = `${API_BASE_URL}/api/diagnose`;
+  console.log("[Diagnosis] Requesting AI diagnosis from API URL:", targetUrl);
+  console.log("[Diagnosis] Issue description payload:", serviceType);
+
   try {
     const res = await axios.post(
-      `${API_BASE_URL}/api/diagnose`,
+      targetUrl,
       { issue: serviceType },
       { timeout: 12000 } // 12s timeout — handles Render cold start
     );
 
+    console.log("[Diagnosis] Backend response received:", res.data);
+
     if (res.data && res.data.success) {
       setAiDiagnosis(res.data.diagnosis);
     } else {
-      // Backend returned success:false — use client fallback silently
-      setAiDiagnosis(getClientDiagnosis(serviceType));
+      console.error("[Diagnosis] Backend returned success: false or invalid response format", res.data);
+      showNotification(res.data?.message || "Failed to load AI diagnosis", "error");
     }
   } catch (error) {
-    console.warn("[Diagnosis] API unreachable, using client fallback:", error.message);
-    // Network error / 500 / timeout — use client-side fallback, NO error toast
+    console.error("[Diagnosis] AI API unreachable or failed completely:", error.message);
+    console.warn("[Diagnosis] Falling back to local Client Diagnosis.");
     setAiDiagnosis(getClientDiagnosis(serviceType));
   } finally {
     setDiagnosisLoading(false);
@@ -967,22 +1013,94 @@ const locationAddress =
 
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Select / Describe Your Issue</label>
-                <select
-                  id="service-type-select"
-                  className="w-full p-3 rounded-xl border border-gray-200 bg-white outline-none text-sm sm:text-base focus:ring-2 focus:ring-emerald-200 focus:border-emerald-500 transition text-slate-700 cursor-pointer"
-                  value={serviceType}
-                  onChange={(e) => {
-                    console.log("[Diagnose] serviceType selected:", e.target.value);
-                    setServiceType(e.target.value);
-                  }}
-                >
-                  <option value="">Select Service Type</option>
-                  {serviceOptions.map((opt, idx) => (
-                    <option key={idx} value={opt}>{opt}</option>
-                  ))}
-                </select>
+                {/* ── Combo-box: dropdown + editable input ── */}
+                <div className="relative">
+                  <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-emerald-200 focus-within:border-emerald-500 transition">
+                    {/* Editable text input */}
+                    <input
+                      id="service-type-select"
+                      type="text"
+                      value={serviceType}
+                      onChange={(e) => {
+                        console.log("[Diagnose] serviceType typed:", e.target.value);
+                        setServiceType(e.target.value);
+                        setShowServiceDropdown(true);
+                      }}
+                      onFocus={() => setShowServiceDropdown(true)}
+                      onBlur={() => setTimeout(() => setShowServiceDropdown(false), 150)}
+                      placeholder="Select or type your issue…"
+                      className="flex-1 p-3 text-sm sm:text-base outline-none bg-white text-slate-700 placeholder-gray-400"
+                    />
+                    {/* Speech recognition mic button */}
+                    <button
+                      type="button"
+                      onClick={startListening}
+                      className={`px-3.5 py-3 border-l border-gray-200 transition-all duration-300 flex items-center justify-center ${
+                        isListening
+                          ? "text-red-600 bg-red-50 animate-pulse scale-105 font-bold"
+                          : "text-slate-400 hover:text-emerald-600 hover:bg-slate-50 bg-gray-50"
+                      }`}
+                      title="Speak your issue"
+                    >
+                      <FaMicrophone className={`${isListening ? "scale-125 text-red-600" : "text-slate-500 hover:text-emerald-600"}`} />
+                    </button>
+                    {/* Dropdown arrow toggle */}
+                    <button
+                      type="button"
+                      onMouseDown={(e) => { e.preventDefault(); setShowServiceDropdown((p) => !p); }}
+                      className="px-3 py-3 text-gray-400 hover:text-emerald-600 bg-gray-50 border-l border-gray-200 transition"
+                    >
+                      <FaChevronDown className={`text-xs transition-transform duration-200 ${showServiceDropdown ? "rotate-180" : ""}`} />
+                    </button>
+                    {/* Clear button */}
+                    {serviceType && (
+                      <button
+                        type="button"
+                        onMouseDown={(e) => { e.preventDefault(); setServiceType(""); setShowServiceDropdown(false); }}
+                        className="px-3 py-3 text-gray-400 hover:text-red-500 bg-gray-50 border-l border-gray-200 transition text-xs font-bold"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
 
-                {/* Diagnose button — always active, guard is inside getAIDiagnosis */}
+                  {/* Dropdown suggestion list */}
+                  {showServiceDropdown && serviceOptions.length > 0 && (
+                    <ul className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-xl shadow-lg mt-1 z-20 max-h-48 overflow-y-auto">
+                      {serviceOptions
+                        .filter((opt) =>
+                          opt.toLowerCase().includes(serviceType.toLowerCase())
+                        )
+                        .map((opt, idx) => (
+                          <li
+                            key={idx}
+                            onMouseDown={() => {
+                              console.log("[Diagnose] serviceType selected:", opt);
+                              setServiceType(opt);
+                              setShowServiceDropdown(false);
+                            }}
+                            className={`px-4 py-2.5 text-sm cursor-pointer transition-colors ${
+                              serviceType === opt
+                                ? "bg-emerald-500 text-white font-semibold"
+                                : "hover:bg-emerald-50 text-slate-700"
+                            }`}
+                          >
+                            {opt}
+                          </li>
+                        ))}
+                      {/* Custom input indicator */}
+                      {serviceType &&
+                        !serviceOptions.some(
+                          (o) => o.toLowerCase() === serviceType.toLowerCase()
+                        ) && (
+                          <li className="px-4 py-2.5 text-sm text-emerald-700 font-medium bg-emerald-50 border-t border-emerald-100 cursor-default">
+                            🔍 Using custom: &quot;{serviceType}&quot;
+                          </li>
+                        )}
+                    </ul>
+                  )}
+                </div>
+
                 <button
                   type="button"
                   onClick={getAIDiagnosis}
