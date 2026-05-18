@@ -24,9 +24,98 @@ import {
   FaCalendarAlt,
   FaUserCircle,
   FaCommentDots,
- 
+  FaLightbulb,
+  FaTools,
+  FaChevronDown,
 } from "react-icons/fa";
 import { MdOutlineVerified } from "react-icons/md";
+
+
+
+
+
+function DiagnosisModal({ isOpen, onClose, issue, diagnosis, loading }) {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[1100] p-4">
+      <motion.div
+        initial={{ scale: 0.88, opacity: 0, y: 30 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.88, opacity: 0, y: 30 }}
+        className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-emerald-100"
+      >
+        {/* Header */}
+        <div className="bg-gradient-to-r from-emerald-600 to-teal-600 p-5 text-white flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <div className="bg-white/20 p-2 rounded-xl">
+              <FaLightbulb className="text-2xl text-emerald-100" />
+            </div>
+            <div>
+              <h2 className="text-lg font-black tracking-wide">AI Issue Diagnosis</h2>
+              <p className="text-xs text-emerald-100 font-medium truncate max-w-[200px]">{issue}</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-full bg-black/10 hover:bg-black/25 transition"
+          >
+            <FaTimes size={18} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-6 space-y-5">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-10 gap-4">
+              <FaSpinner className="animate-spin text-4xl text-emerald-500" />
+              <p className="text-slate-500 font-semibold text-sm animate-pulse">Analysing your issue with AI...</p>
+            </div>
+          ) : diagnosis ? (
+            <>
+              {/* Possible Causes */}
+              <div>
+                <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-red-100 text-red-500 flex items-center justify-center text-[10px] font-black">!</span>
+                  Possible Causes
+                </h3>
+                <ul className="space-y-2">
+                  {diagnosis.causes.map((c, i) => (
+                    <li key={i} className="flex items-start gap-2.5 text-sm text-slate-700">
+                      <span className="mt-0.5 w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-[10px] font-bold shrink-0">
+                        {i + 1}
+                      </span>
+                      {c}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Recommended Service */}
+              <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4">
+                <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-2">
+                  <FaTools className="text-emerald-500" /> Recommended Service
+                </h3>
+                <p className="text-sm text-slate-700 leading-relaxed">{diagnosis.service}</p>
+              </div>
+
+              {/* CTA */}
+              <button
+                onClick={onClose}
+                className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md shadow-emerald-200 transition flex items-center justify-center gap-2"
+              >
+                <FaCheck /> Got it — Book a Service
+              </button>
+            </>
+          ) : (
+            <div className="py-10 text-center text-slate-400 text-sm">
+              No diagnosis available. Please try again.
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
 export default function UnifiedService({
   serviceName,
   subtitle,
@@ -68,7 +157,9 @@ export default function UnifiedService({
   const [notification, setNotification] = useState(null);
   const [openSearch, setOpenSearch] = useState(false);
   const [visibleCount, setVisibleCount] = useState(5);
-  
+  const [showDiagnosis, setShowDiagnosis] = useState(false);
+  const [aiDiagnosis, setAiDiagnosis] = useState(null);
+const [diagnosisLoading, setDiagnosisLoading] = useState(false);
   const [showQueryPopup, setShowQueryPopup] = useState(false);
   const [queryForm, setQueryForm] = useState({
     userName: "",
@@ -456,6 +547,35 @@ const fetchAddress = async (lat, lng) => {
   }
 };
 
+const getAIDiagnosis = async () => {
+  if (diagnosisLoading) return;
+  if (!serviceType || serviceType.trim() === "") {
+    showNotification("Please select your issue first", "error");
+    return;
+  }
+
+  try {
+    setDiagnosisLoading(true);
+
+    const res = await axios.post(
+      `${API_BASE_URL}/api/diagnose`,
+      { issue: serviceType }
+    );
+
+    if (res.data.success) {
+      setAiDiagnosis(res.data.diagnosis);
+      setShowDiagnosis(true);
+    } else {
+      showNotification("Diagnosis failed", "error");
+    }
+  } catch (error) {
+    console.error(error);
+    showNotification("AI diagnosis failed", "error");
+  } finally {
+    setDiagnosisLoading(false);
+  }
+};
+
   const sendOtp = async () => {
     if (!selected || !name || !serviceType || !email || !location || !bookingDate || !bookingTime) {
       showNotification("Fill all details properly", "error");
@@ -783,19 +903,33 @@ const locationAddress =
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Select Service Type</label>
+                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Select / Describe Your Issue</label>
                 <select
-                  className="w-full p-3 rounded-xl border border-gray-200 bg-white outline-none text-sm sm:text-base focus:ring-2 focus:ring-emerald-200 focus:border-emerald-500 transition"
+                  id="service-type-select"
+                  className="w-full p-3 rounded-xl border border-gray-200 bg-white outline-none text-sm sm:text-base focus:ring-2 focus:ring-emerald-200 focus:border-emerald-500 transition text-slate-700 cursor-pointer"
                   value={serviceType}
-                  onChange={(e) => setServiceType(e.target.value)}
+                  onChange={(e) => {
+                    console.log("[Diagnose] serviceType selected:", e.target.value);
+                    setServiceType(e.target.value);
+                  }}
                 >
                   <option value="">Select Service Type</option>
                   {serviceOptions.map((opt, idx) => (
-                    <option key={idx} value={opt}>
-                      {opt}
-                    </option>
+                    <option key={idx} value={opt}>{opt}</option>
                   ))}
                 </select>
+
+                {/* Diagnose button — always active, guard is inside getAIDiagnosis */}
+                <button
+                  type="button"
+                  onClick={getAIDiagnosis}
+                  className="mt-2 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition cursor-pointer"
+                >
+                  {diagnosisLoading
+                    ? <FaSpinner className="animate-spin" />
+                    : <FaLightbulb />}
+                  {diagnosisLoading ? "Diagnosing..." : "Diagnose My Issue"}
+                </button>
               </div>
 
               <div>
@@ -975,14 +1109,27 @@ const locationAddress =
             serviceCategory: w.service || serviceName || "",
             query: ""
           });
-          setOpenSearch(false); // Close search overlay
-          setShowQueryPopup(true); // Open modal
+          setOpenSearch(false);
+          setShowQueryPopup(true);
         }}
         onReviewWorker={(w) => {
           setOpenSearch(false);
           openReviews(w);
         }}
       />
+
+      {/* Diagnosis Modal */}
+      <AnimatePresence>
+        {showDiagnosis && (
+         <DiagnosisModal
+  isOpen={showDiagnosis}
+  onClose={() => { setShowDiagnosis(false); setAiDiagnosis(null); }}
+  issue={serviceType}
+  diagnosis={aiDiagnosis}
+  loading={diagnosisLoading}
+/>
+        )}
+      </AnimatePresence>
 
       
       {showQueryPopup && (
