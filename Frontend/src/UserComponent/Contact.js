@@ -25,6 +25,20 @@ export default function Feedback() {
     feedback: "",
   });
 
+  const [fbImage, setFbImage] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setFbImage(reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
   const [allWorkers, setAllWorkers] = useState([]);
   const [selectedWorker, setSelectedWorker] = useState(null);
   const [loadingWorkers, setLoadingWorkers] = useState(true);
@@ -118,6 +132,8 @@ export default function Feedback() {
   };
 
   const handleSubmit = async () => {
+    if (submitting) return;
+
     if (!form.name || !form.email || !form.feedback) {
       alert("Please fill all fields");
       return;
@@ -128,6 +144,7 @@ export default function Feedback() {
       return;
     }
 
+    setSubmitting(true);
     try {
       const res = await fetch(`${baseUrl}/api/feedback`, {
         method: "POST",
@@ -141,6 +158,7 @@ export default function Feedback() {
           customerName: form.name,
           rating: form.rating,
           comment: form.feedback,
+          image: fbImage || null,
         }),
       });
 
@@ -158,6 +176,7 @@ export default function Feedback() {
             rating: 5,
             feedback: "",
           });
+          setFbImage("");
         }, 3000);
       } else {
         alert("Feedback submission failed");
@@ -165,6 +184,8 @@ export default function Feedback() {
     } catch (error) {
       console.log(error);
       alert("Server error");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -398,13 +419,38 @@ export default function Feedback() {
                   className="w-full border border-gray-200 rounded-xl p-4 h-32 resize-none mb-5 outline-none focus:ring-2 focus:ring-green-400"
                 />
 
+                {/* PHOTO UPLOAD */}
+                <div className="mb-5">
+                  <label className="block text-gray-700 font-bold text-sm mb-2">Add Photo (Optional)</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageChange}
+                    className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-green-50 file:text-green-700 hover:file:bg-green-100 cursor-pointer transition"
+                  />
+
+                  {fbImage && (
+                    <div className="mt-3 relative inline-block rounded-xl overflow-hidden border border-gray-200 bg-gray-50 shadow-sm h-24 w-24 group">
+                      <img src={fbImage} alt="Preview" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setFbImage("")}
+                        className="absolute top-1 right-1 bg-black/60 hover:bg-red-500 text-white rounded-full h-5 w-5 flex items-center justify-center text-xs font-bold transition duration-200"
+                      >
+                        &times;
+                      </button>
+                    </div>
+                  )}
+                </div>
+
                 {/* BUTTON */}
                 <button
                   onClick={handleSubmit}
-                  className="w-full bg-green-600 hover:bg-green-700 transition-all duration-300 text-white py-4 rounded-xl font-semibold flex items-center justify-center gap-3 shadow-lg hover:shadow-green-200"
+                  disabled={submitting}
+                  className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-400 transition-all duration-300 text-white py-4 rounded-xl font-semibold flex items-center justify-center gap-3 shadow-lg hover:shadow-green-200 active:scale-[0.99]"
                 >
                   <FaPaperPlane />
-                  Submit Feedback
+                  {submitting ? "Submitting Feedback..." : "Submit Feedback"}
                 </button>
               </>
             )}

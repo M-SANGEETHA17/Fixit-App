@@ -28,6 +28,7 @@ import {
   FaTools,
   FaChevronDown,
   FaMicrophone,
+  FaHistory,
 } from "react-icons/fa";
 import { MdOutlineVerified } from "react-icons/md";
 
@@ -128,9 +129,43 @@ export default function UnifiedService({
   const [selected, setSelected] = useState(null);
   const [loadingWorkers, setLoadingWorkers] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
+  const [recentWorkers, setRecentWorkers] = useState([]);
+  const [email, setEmail] = useState(() => {
+    try {
+      const storedUser = localStorage.getItem("user");
+      if (storedUser) {
+        const parsed = JSON.parse(storedUser);
+        return parsed.email || "";
+      }
+    } catch (e) {
+      console.error("Error reading email from localStorage:", e);
+    }
+    return "";
+  });
+  const [name, setName] = useState(() => {
+    try {
+      const storedUser = localStorage.getItem("user");
+      if (storedUser) {
+        const parsed = JSON.parse(storedUser);
+        return parsed.name || "";
+      }
+    } catch (e) {
+      console.error("Error reading name from localStorage:", e);
+    }
+    return "";
+  });
+  const [phone, setPhone] = useState(() => {
+    try {
+      const storedUser = localStorage.getItem("user");
+      if (storedUser) {
+        const parsed = JSON.parse(storedUser);
+        return parsed.phone || parsed.mobile || "";
+      }
+    } catch (e) {
+      console.error("Error reading phone from localStorage:", e);
+    }
+    return "";
+  });
   const [serviceType, setServiceType] = useState("");
   const [bookingDate, setBookingDate] = useState("");
   const [bookingTime, setBookingTime] = useState("");
@@ -148,6 +183,27 @@ export default function UnifiedService({
       localStorage.setItem("userLocation", JSON.stringify(location));
     }
   }, [location]);
+
+  const fetchRecentWorkers = async () => {
+    try {
+      if (!phone && !name) return;
+      const queryParams = new URLSearchParams();
+      if (phone) queryParams.append("phone", phone);
+      if (name) queryParams.append("name", name);
+
+      const res = await fetch(`${API_BASE_URL}/api/bookings/user?${queryParams.toString()}`);
+      const data = await res.json();
+      if (data.success) {
+        setRecentWorkers(data.recentWorkers || []);
+      }
+    } catch (err) {
+      console.error("Error fetching recent workers:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchRecentWorkers();
+  }, [phone, name]);
 
   const [loadingLoc, setLoadingLoc] = useState(false);
   const [otpStep, setOtpStep] = useState(false);
@@ -753,8 +809,24 @@ const getAIDiagnosis = async () => {
 
         setOtpStep(false);
         setSelected(null);
-        setName("");
-        setPhone("");
+        fetchRecentWorkers();
+        try {
+          const storedUser = localStorage.getItem("user");
+          if (storedUser) {
+            const parsed = JSON.parse(storedUser);
+            setName(parsed.name || "");
+            setPhone(parsed.phone || parsed.mobile || "");
+            setEmail(parsed.email || "");
+          } else {
+            setName("");
+            setPhone("");
+            setEmail("");
+          }
+        } catch (e) {
+          setName("");
+          setPhone("");
+          setEmail("");
+        }
         setServiceType("");
         setBookingDate("");
         setBookingTime("");
@@ -873,6 +945,54 @@ const getAIDiagnosis = async () => {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
+
+          {/* RECENTLY BOOKED EXPERTS */}
+          {recentWorkers && recentWorkers.length > 0 ? (
+            <div className="mb-6 bg-slate-50 p-4 rounded-2xl border border-slate-100 shadow-sm animate-fade-in">
+              <h3 className="text-xs font-black text-slate-500 tracking-wider uppercase mb-3 flex items-center gap-1.5">
+                <FaHistory className="text-emerald-600 animate-pulse text-sm" /> Your Recent Bookings
+              </h3>
+              <div className="flex gap-4 overflow-x-auto pb-2 scroll-smooth custom-scrollbar">
+                {recentWorkers.map((w) => (
+                  <motion.div
+                    key={w._id}
+                    onClick={() => {
+                      setSelected(w);
+                      localStorage.setItem("selectedWorker", JSON.stringify(w));
+                      navigate("/viewprofile");
+                    }}
+                    whileHover={{ y: -3, scale: 1.02 }}
+                    className="flex-shrink-0 w-60 bg-white border border-slate-200/65 p-4 rounded-xl shadow-sm hover:shadow-md cursor-pointer transition-all"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-sm shrink-0 shadow-sm">
+                        {w.name?.[0]?.toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="font-bold text-slate-800 text-sm truncate">{w.name}</h4>
+                        <p className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded inline-block mt-0.5">{w.service}</p>
+                      </div>
+                    </div>
+                    <div className="mt-3 pt-2.5 border-t border-slate-100 space-y-1 text-slate-500">
+                      <p className="text-xs font-semibold flex items-center gap-1.5 truncate">
+                        <FaPhone className="text-emerald-500 text-[10px]" /> {w.phone}
+                      </p>
+                      <p className="text-xs font-semibold flex items-center gap-1.5 truncate">
+                        <FaMapMarkerAlt className="text-emerald-500 text-[10px]" /> {w.location || "Local Expert"}
+                      </p>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="mb-6 bg-slate-50/50 p-4 rounded-2xl border border-dashed border-slate-200 text-center">
+              <h3 className="text-xs font-black text-slate-400 tracking-wider uppercase mb-1.5 flex items-center justify-center gap-1.5">
+                <FaHistory className="text-slate-400 text-sm" /> Your Recent Bookings
+              </h3>
+              <p className="text-xs text-slate-400 font-medium">You haven't booked any experts yet. Once you make a booking, they will appear here!</p>
+            </div>
+          )}
 
           <div className="space-y-4 max-h-[450px] sm:max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
             {loadingWorkers ? (
@@ -1132,7 +1252,7 @@ const locationAddress =
 
   <input
     type="email"
-    className="w-full p-3 rounded-xl border border-gray-200 outline-none"
+    className="w-full p-3 rounded-xl border border-gray-200 outline-none text-sm sm:text-base focus:ring-2 focus:ring-emerald-200 focus:border-emerald-500 transition"
     placeholder="Enter your email"
     value={email}
     onChange={(e) => setEmail(e.target.value)}
@@ -1471,6 +1591,11 @@ const locationAddress =
                               <div className="relative pl-4">
                                 <FaQuoteLeft className="absolute top-0 left-0 text-slate-200 text-[10px]" />
                                 <p className="text-slate-600 italic text-sm leading-relaxed line-clamp-3">{fb.comment}</p>
+                                {fb.image && (
+                                  <div className="mt-2 max-w-[200px] rounded-xl overflow-hidden border border-slate-200 bg-slate-50 shadow-sm">
+                                    <img src={fb.image} alt="Feedback Attachment" className="w-full max-h-32 object-contain" />
+                                  </div>
+                                )}
                               </div>
                             </td>
                           </tr>

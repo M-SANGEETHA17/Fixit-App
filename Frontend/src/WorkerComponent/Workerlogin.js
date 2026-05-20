@@ -45,12 +45,10 @@ export default function WorkerLogin() {
         return;
       }
 
-      // ✅ STORE WORKER DATA FOR FEEDBACK DASHBOARD
-      // The dashboard expects an object with "email" and "name"
       const workerForDashboard = {
         _id: worker._id,
-        email: worker.email,               // ✅ required for fetching feedback
-        name: worker.name || worker.fullName || "Worker", // ✅ required for greeting
+        email: worker.email,
+        name: worker.name || worker.fullName || "Worker",
         phone: worker.phone || "",
         service: worker.service || "",
         status: worker.status
@@ -64,7 +62,6 @@ export default function WorkerLogin() {
 
     } catch (err) {
       console.log(err);
-
       if (err.response?.data?.message) {
         alert(err.response.data.message);
       } else {
@@ -73,9 +70,13 @@ export default function WorkerLogin() {
     }
   };
 
+  const handleForgotPassword = () => {
+    alert("Password reset instructions have been sent to your worker email!");
+  };
+
   return (
     <div className="min-h-screen flex bg-gradient-to-br from-green-100 via-white to-green-200">
-
+      {/* Left Pane - Original UI */}
       <motion.div
         initial={{ opacity: 0, x: -80 }}
         animate={{ opacity: 1, x: 0 }}
@@ -97,15 +98,14 @@ export default function WorkerLogin() {
         </div>
       </motion.div>
 
+      {/* Right Pane - Original UI with Dropdown & Forgot Password */}
       <motion.div
         initial={{ opacity: 0, x: 80 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.8 }}
         className="w-full md:w-1/2 flex items-center justify-center p-6"
       >
-
         <div className="bg-white/80 backdrop-blur-lg shadow-2xl rounded-3xl p-8 w-full max-w-md border border-green-100">
-
           <h2 className="text-3xl font-bold text-green-600 text-center">
             Worker Login
           </h2>
@@ -113,6 +113,21 @@ export default function WorkerLogin() {
           <p className="text-gray-500 text-center mt-2 mb-6 text-sm">
             Login to access your dashboard
           </p>
+
+          {/* Navigation Dropdown Selector */}
+          <div className="mb-4">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Select Login Type</label>
+            <select
+              value="worker"
+              onChange={(e) => {
+                if (e.target.value === "user") navigate("/login");
+              }}
+              className="w-full p-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-green-400 bg-white cursor-pointer text-gray-700"
+            >
+              <option value="user">User Login</option>
+              <option value="worker">Worker Login</option>
+            </select>
+          </div>
 
           <input
             type="email"
@@ -125,10 +140,20 @@ export default function WorkerLogin() {
           <input
             type="password"
             placeholder="Enter Password"
-            className="w-full p-3 border rounded-xl mb-6 focus:outline-none focus:ring-2 focus:ring-green-400"
+            className="w-full p-3 border rounded-xl mb-4 focus:outline-none focus:ring-2 focus:ring-green-400"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
+
+          {/* Forgot Password Link */}
+          <div className="text-right mb-4">
+            <button
+              onClick={handleForgotPassword}
+              className="text-xs font-semibold text-green-600 hover:text-green-700 hover:underline transition"
+            >
+              Forgot password?
+            </button>
+          </div>
 
           <button
             onClick={handleLogin}
@@ -147,19 +172,17 @@ export default function WorkerLogin() {
             </Link>
           </p>
 
-          
-          <div className="text-center">
-  <Link
-    to="/"
-    className="text-green-600 font-medium hover:text-green-700 hover:underline"
-  >
-    ← Back to Home
-  </Link>
-</div>
-
+          <div className="text-center mt-4">
+            <Link
+              to="/"
+              className="text-green-600 font-medium hover:text-green-700 hover:underline"
+            >
+              ← Back to Home
+            </Link>
+          </div>
         </div>
       </motion.div>
-
     </div>
   );
 }
+

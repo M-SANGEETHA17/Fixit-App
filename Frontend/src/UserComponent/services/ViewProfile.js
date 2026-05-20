@@ -21,7 +21,18 @@ export default function ViewProfile() {
 
   // Feedback Form States
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
-  const [fbUserName, setFbUserName] = useState("");
+  const [fbUserName, setFbUserName] = useState(() => {
+    try {
+      const stored = localStorage.getItem("user");
+      if (stored) {
+        const u = JSON.parse(stored);
+        return u.name || "";
+      }
+    } catch (e) {
+      console.error("Error reading userName from localStorage:", e);
+    }
+    return "";
+  });
   const [fbMessage, setFbMessage] = useState("");
   const [fbStars, setFbStars] = useState(5);
   const [fbImage, setFbImage] = useState("");
@@ -81,14 +92,44 @@ export default function ViewProfile() {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onloadend = () => {
-      setFbImage(reader.result); // Store as Base64 string
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const MAX_WIDTH = 800;
+        const MAX_HEIGHT = 800;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height = Math.round((height * MAX_WIDTH) / width);
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width = Math.round((width * MAX_HEIGHT) / height);
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Compress to JPEG with 0.7 quality to reduce file size significantly
+        const compressedBase64 = canvas.toDataURL("image/jpeg", 0.7);
+        setFbImage(compressedBase64);
+      };
+      img.src = event.target.result;
     };
     reader.readAsDataURL(file);
   };
 
   const handleFeedbackSubmit = async (e) => {
     e.preventDefault();
+    if (submittingFb) return; // Prevent duplicate click trigger
     if (!fbUserName.trim() || !fbMessage.trim()) {
       alert("Please fill out your name and feedback message.");
       return;
@@ -106,7 +147,17 @@ export default function ViewProfile() {
       if (res.data && res.data.success) {
         setWorker(res.data.worker); // Refresh worker data (includes new feedback/stars)
         setShowFeedbackModal(false);
-        setFbUserName("");
+        try {
+          const stored = localStorage.getItem("user");
+          if (stored) {
+            const u = JSON.parse(stored);
+            setFbUserName(u.name || "");
+          } else {
+            setFbUserName("");
+          }
+        } catch {
+          setFbUserName("");
+        }
         setFbMessage("");
         setFbStars(5);
         setFbImage("");
@@ -266,7 +317,18 @@ export default function ViewProfile() {
               </h2>
 
               <button
-                onClick={() => setShowFeedbackModal(true)}
+                onClick={() => {
+                  try {
+                    const stored = localStorage.getItem("user");
+                    if (stored) {
+                      const u = JSON.parse(stored);
+                      if (u.name) setFbUserName(u.name);
+                    }
+                  } catch (e) {
+                    console.error("Error setting name on click:", e);
+                  }
+                  setShowFeedbackModal(true);
+                }}
                 className="bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-xl shadow-md transition duration-200 active:scale-95"
               >
                 Give Feedback

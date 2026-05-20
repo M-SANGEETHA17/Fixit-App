@@ -222,6 +222,11 @@ export default function WorkerFeedbackDashboard() {
                         <div className="relative pl-5 italic text-sm leading-relaxed text-gray-600">
                           <FaQuoteLeft className="absolute top-0 left-0 text-green-200 text-xs" />
                           {fb.comment}
+                          {fb.image && (
+                            <div className="mt-2 max-w-[200px] rounded-xl overflow-hidden border border-slate-200 bg-slate-50 shadow-sm not-italic">
+                              <img src={fb.image} alt="Feedback Attachment" className="w-full max-h-32 object-contain" />
+                            </div>
+                          )}
                         </div>
                       </td>
                     </tr>

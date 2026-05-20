@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { RiArrowDropDownLine } from "react-icons/ri";
 import { FaBars, FaTimes } from "react-icons/fa";
 import axios from "axios";
@@ -15,6 +15,9 @@ export default function Navbar() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [sosLoading, setSosLoading] = useState(false);
   const [sosResult, setSosResult] = useState(null); // { success, worker, message }
+
+  const [mobileServicesOpen, setMobileServicesOpen] = useState(false);
+  const dropdownRef = useRef(null);
 
   useEffect(() => {
     const loggedUser = JSON.parse(localStorage.getItem("user"));
@@ -33,6 +36,15 @@ export default function Navbar() {
     "Home Cleaning",
     "Carpentry",
     "Pest Control",
+  ];
+
+  const serviceLinks = [
+    { name: "Electrical", path: "/electricalrepair" },
+    { name: "Plumbing", path: "/plumbing" },
+    { name: "AC Repair", path: "/acservice" },
+    { name: "Home Cleaning", path: "/homecleaning" },
+    { name: "Carpentry", path: "/carpentry" },
+    { name: "Pest Control", path: "/pestcontrol" },
   ];
 
   const handleOpenSOS = () => {
@@ -92,113 +104,248 @@ export default function Navbar() {
     setShowDropdown(false);
   };
 
+  // Close desktop dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Close mobile menu on desktop resizing
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 1024) {
+        setMenuOpen(false);
+      }
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   return (
-    <nav className="bg-green-100 text-green-900 px-4 md:px-10 py-4 shadow-md sticky top-0 z-50 relative">
-
-      {/* TOP NAV */}
-      <div className="flex justify-between items-center">
-
+    <nav className="bg-green-100/95 backdrop-blur-md border-b border-green-200 text-green-950 px-4 sm:px-6 lg:px-8 py-3.5 shadow-sm sticky top-0 z-50 relative">
+      {/* Container to center and constrain max-width */}
+      <div className="max-w-7xl mx-auto flex justify-between items-center w-full">
         {/* LOGO */}
-        {/* LOGO */}
-<div>
-  <Link to="/">
-    <h1 className="text-2xl font-extrabold leading-tight">
-      <span className="text-green-600">FIX</span>
-      <span className="text-gray-800">IT</span>
-    </h1>
-
-    {/* NEW TAGLINE */}
-    <p className="text-[11px] text-gray-600 tracking-wide">
-      On-Demand Services
-    </p>
-  </Link>
-</div>
+        <div className="flex-shrink-0">
+          <Link to="/adminlogin" className="group">
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-widest transition-all duration-300">
+              <span className="text-green-600 group-hover:text-green-500 transition-colors">FIX</span>
+              <span className="text-gray-800 group-hover:text-gray-900 transition-colors">IT</span>
+            </h1>
+            <p className="text-[11px] text-green-700 tracking-wide font-medium">
+              On-Demand Services
+            </p>
+          </Link>
+        </div>
 
         {/* MOBILE MENU ICON */}
-        <div className="md:hidden">
-          <button onClick={() => setMenuOpen(!menuOpen)}>
-            {menuOpen ? <FaTimes /> : <FaBars />}
+        <div className="lg:hidden">
+          <button 
+            onClick={() => setMenuOpen(!menuOpen)}
+            className="p-2 text-green-800 hover:text-green-600 hover:bg-green-200/50 rounded-lg transition-colors focus:outline-none"
+            aria-label="Toggle Menu"
+          >
+            {menuOpen ? <FaTimes className="text-xl" /> : <FaBars className="text-xl" />}
           </button>
         </div>
 
-        {/* MENU */}
-        <div className="hidden md:flex items-center gap-8 text-sm font-medium">
-          <Link to="/">Home</Link>
-          <Link to="/cmpy">About</Link>
+        {/* DESKTOP MENU */}
+        <div className="hidden lg:flex items-center gap-8 text-sm font-semibold text-green-800">
+          <Link to="/" className="hover:text-green-950 transition-colors">Home</Link>
+          <Link to="/cmpy" className="hover:text-green-950 transition-colors">About</Link>
 
-          <div className="relative">
-            <button onClick={() => setOpen(!open)} className="flex items-center gap-1">
-              Our Services <RiArrowDropDownLine />
+          <div className="relative" ref={dropdownRef}>
+            <button 
+              onClick={() => setOpen(!open)} 
+              className="flex items-center gap-1 hover:text-green-950 focus:outline-none transition-colors"
+            >
+              Our Services <RiArrowDropDownLine className={`text-2xl transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
             </button>
 
             {open && (
-              <div className="absolute top-10 left-0 bg-white border w-64 rounded shadow-lg">
-                {services.map((s, i) => (
-                  <Link key={i} to="/" className="block px-4 py-3 hover:bg-green-100">
-                    {s}
+              <div className="absolute top-full left-0 mt-2 bg-white border border-green-100 w-64 rounded-xl shadow-xl py-2 z-50 transform transition-all duration-200 ease-out origin-top-left animate-fadeIn">
+                {serviceLinks.map((s, i) => (
+                  <Link 
+                    key={i} 
+                    to={s.path} 
+                    onClick={() => setOpen(false)}
+                    className="block px-4 py-2.5 text-sm text-green-900 hover:bg-green-50 hover:text-green-950 transition-colors"
+                  >
+                    {s.name}
                   </Link>
                 ))}
               </div>
             )}
           </div>
 
-          <Link to="/contact">Feedback</Link>
+          <Link to="/contact" className="hover:text-green-950 transition-colors">Feedback</Link>
         </div>
 
-        {/* RIGHT SIDE */}
-        <div className="hidden md:flex items-center gap-3">
-
+        {/* DESKTOP RIGHT SIDE */}
+        <div className="hidden lg:flex items-center gap-4">
           {/* SOS */}
           <button
             onClick={handleOpenSOS}
-            className="px-5 py-2 bg-red-500 text-white rounded-full animate-pulse"
+            className="px-5 py-2.5 bg-red-500 hover:bg-red-600 text-white font-bold rounded-full shadow-md shadow-red-200 transition-all hover:scale-105 animate-pulse flex items-center gap-1.5"
           >
             🔴 SOS
           </button>
 
           {user ? (
-            <>
-              <span className="font-semibold text-green-700">{user.name}</span>
-
+            <div className="flex items-center gap-3 bg-green-200/50 pl-3 pr-1 py-1 rounded-full border border-green-300/40">
+              <span className="font-semibold text-green-800 text-sm">{user.name}</span>
               <button
                 onClick={handleLogout}
-                className="px-4 py-2 bg-red-500 text-white rounded-full"
+                className="px-4 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full text-sm font-semibold transition-all shadow-sm"
               >
                 Logout
               </button>
-            </>
+            </div>
           ) : (
-            <>
-              <Link to="/login" className="px-4 py-2 bg-green-500 text-white rounded-full">
+            <div className="flex items-center gap-2">
+              <Link to="/login" className="px-5 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-full shadow-sm transition-all text-sm">
                 Login
               </Link>
-
-              <Link to="/register" className="px-4 py-2 border border-green-500 text-green-600 rounded-full">
+              <Link to="/register" className="px-5 py-2 border border-green-600 text-green-750 hover:bg-green-200/30 font-semibold rounded-full shadow-sm transition-all text-sm">
                 Sign Up
               </Link>
-            </>
+            </div>
           )}
-
         </div>
       </div>
 
-      {/* MOBILE MENU */}
+      {/* MOBILE BACKDROP OVERLAY */}
       {menuOpen && (
-        <div className="md:hidden mt-4 flex flex-col gap-3">
-
-          <Link to="/">Home</Link>
-          <Link to="/cmpy">About</Link>
-
-          <button
-            onClick={handleOpenSOS}
-            className="py-2 bg-red-500 text-white rounded"
-          >
-            🔴 SOS Emergency
-          </button>
-
-        </div>
+        <div 
+          className="fixed inset-0 bg-black/35 backdrop-blur-xs z-30 lg:hidden"
+          onClick={() => setMenuOpen(false)}
+        />
       )}
+
+      {/* MOBILE MENU */}
+      <div 
+        className={`lg:hidden absolute top-full left-0 right-0 bg-green-50 border-b border-green-250 shadow-xl z-40 transition-all duration-300 ease-in-out origin-top ${
+          menuOpen 
+            ? "opacity-100 translate-y-0 pointer-events-auto" 
+            : "opacity-0 -translate-y-4 pointer-events-none"
+        } overflow-y-auto`}
+      >
+        <div className="px-6 py-6 space-y-6">
+          {/* Navigation Links */}
+          <div className="flex flex-col gap-4 text-base font-semibold text-green-800">
+            <Link 
+              to="/" 
+              onClick={() => setMenuOpen(false)} 
+              className="hover:text-green-950 transition-colors py-1 border-b border-green-100/60"
+            >
+              Home
+            </Link>
+            <Link 
+              to="/cmpy" 
+              onClick={() => setMenuOpen(false)} 
+              className="hover:text-green-950 transition-colors py-1 border-b border-green-100/60"
+            >
+              About
+            </Link>
+            
+            {/* Expandable Services Accordion */}
+            <div className="border-b border-green-100/60">
+              <button 
+                onClick={() => setMobileServicesOpen(!mobileServicesOpen)}
+                className="w-full flex items-center justify-between hover:text-green-950 transition-colors py-1 text-left"
+              >
+                <span>Our Services</span>
+                <RiArrowDropDownLine className={`text-2xl transition-transform duration-200 ${mobileServicesOpen ? "rotate-180" : ""}`} />
+              </button>
+              
+              {mobileServicesOpen && (
+                <div className="pl-4 mt-1 mb-2 border-l border-green-200/80 flex flex-col gap-1.5">
+                  {serviceLinks.map((s, i) => (
+                    <Link 
+                      key={i} 
+                      to={s.path} 
+                      onClick={() => setMenuOpen(false)}
+                      className="block py-2 text-sm text-green-700 hover:text-green-950 transition-colors"
+                    >
+                      {s.name}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            <Link 
+              to="/contact" 
+              onClick={() => setMenuOpen(false)} 
+              className="hover:text-green-950 transition-colors py-1"
+            >
+              Feedback
+            </Link>
+          </div>
+
+          <hr className="border-green-150" />
+
+          {/* SOS & Authentication Area */}
+          <div className="flex flex-col gap-4">
+            {/* SOS Trigger */}
+            <button
+              onClick={() => {
+                setMenuOpen(false);
+                handleOpenSOS();
+              }}
+              className="w-full py-3 bg-red-500 hover:bg-red-600 text-white rounded-full font-bold shadow-md shadow-red-200 flex items-center justify-center gap-2 animate-pulse"
+            >
+              🔴 SOS Emergency
+            </button>
+
+            {/* Auth Section */}
+            {user ? (
+              <div className="bg-green-100/50 border border-green-200 rounded-2xl p-4 flex flex-col gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-green-200 flex items-center justify-center font-bold text-green-800">
+                    {user.name[0].toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="text-xs text-green-600 font-medium">Logged in as</p>
+                    <p className="font-bold text-green-900">{user.name}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    handleLogout();
+                  }}
+                  className="w-full py-2 bg-red-500 hover:bg-red-600 text-white rounded-full font-semibold transition-colors text-sm shadow-sm"
+                >
+                  Logout
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Link 
+                  to="/login" 
+                  onClick={() => setMenuOpen(false)}
+                  className="flex-1 py-2.5 bg-green-600 hover:bg-green-700 text-white text-center rounded-full font-semibold shadow-sm transition-colors text-sm"
+                >
+                  Login
+                </Link>
+                <Link 
+                  to="/register" 
+                  onClick={() => setMenuOpen(false)}
+                  className="flex-1 py-2.5 border border-green-600 text-green-700 hover:bg-green-100/35 text-center rounded-full font-semibold transition-colors text-sm"
+                >
+                  Sign Up
+                </Link>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* SOS POPUP */}
       {showSOS && (
