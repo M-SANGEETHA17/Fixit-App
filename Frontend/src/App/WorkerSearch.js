@@ -17,8 +17,125 @@ import {
   FaQuestionCircle
 } from "react-icons/fa";
 import { MdOutlineVerified } from "react-icons/md";
+import { Capacitor } from "@capacitor/core";
 import { Geolocation } from "@capacitor/geolocation";
 import { API_BASE_URL } from "../config";
+
+// Simple Levenshtein distance helper
+const getLevenshteinDistance = (a, b) => {
+  const matrix = [];
+  for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+  for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      if (b.charAt(i - 1) === a.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+  return matrix[b.length][a.length];
+};
+
+const knownCities = [
+  "Chennai", "Sattur", "Coimbatore", "Madurai", "Trichy", "Salem", 
+  "Tirunelveli", "Palayamkottai", "Kovilpatti", "Sivakasi", 
+  "Virudhunagar", "Thoothukudi", "Tuticorin", "Palani", "Dindigul",
+  "Nagercoil", "Kanyakumari", "Erode", "Vellore", "Thanjavur", 
+  "Hosur", "Karur", "Rajapalayam", "Sankaranayinarkoil", "Tenkasi"
+];
+
+const resolveFuzzyCity = (cityInput) => {
+  if (!cityInput) return "";
+  const input = cityInput.trim().toLowerCase();
+  if (input === "nearby" || input === "near by") return "Nearby";
+  
+  // Direct matches
+  for (const city of knownCities) {
+    if (city.toLowerCase() === input) return city;
+  }
+  
+  // Clean punctuation and common suffixes
+  let cleanInput = input.replace(/\s+district$/i, "").replace(/\s+town$/i, "").replace(/\s+village$/i, "").trim();
+  
+  // Check for common typo mappings
+  const commonCityTypos = {
+    "satur": "Sattur",
+    "sathur": "Sattur",
+    "madruai": "Madurai",
+    "madura": "Madurai",
+    "chenai": "Chennai",
+    "coimbator": "Coimbatore",
+    "kovilpati": "Kovilpatti",
+    "kovilpatty": "Kovilpatti",
+    "tirunelvely": "Tirunelveli",
+    "trichy": "Trichy",
+    "trichi": "Trichy",
+    "tuticorin": "Thoothukudi",
+    "thoothukudi": "Thoothukudi",
+    "sivakasi": "Sivakasi",
+    "sivakashi": "Sivakasi",
+    "virudhunagar": "Virudhunagar",
+    "virudunagar": "Virudhunagar",
+    "palayamkotai": "Palayamkottai",
+    "palayankottai": "Palayamkottai"
+  };
+  
+  if (commonCityTypos[cleanInput]) {
+    return commonCityTypos[cleanInput];
+  }
+  
+  // Calculate Levenshtein distance for fuzzy matching
+  let bestMatch = cityInput;
+  let minDistance = 3; // allow up to 2 changes
+  
+  for (const city of knownCities) {
+    const cLower = city.toLowerCase();
+    const dist = getLevenshteinDistance(cleanInput, cLower);
+    if (dist < minDistance) {
+      minDistance = dist;
+      bestMatch = city;
+    }
+  }
+  
+  return bestMatch;
+};
+
+const getHaversineDistance = (lat1, lon1, lat2, lon2) => {
+  if (!lat1 || !lon1 || !lat2 || !lon2) return Infinity;
+  const R = 6371; // Radius of the earth in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+};
+
+const cityCoords = {
+  madurai: { lat: 9.9252, lon: 78.1198 },
+  tirunelveli: { lat: 8.7139, lon: 77.7567 },
+  chennai: { lat: 13.0827, lon: 80.2707 },
+  coimbatore: { lat: 11.0168, lon: 76.9558 },
+  trichy: { lat: 10.7905, lon: 78.7047 },
+  sattur: { lat: 9.3582, lon: 77.9202 },
+  salem: { lat: 11.6643, lon: 78.1460 },
+  palayamkottai: { lat: 8.7100, lon: 77.7300 },
+  kovilpatti: { lat: 9.1700, lon: 77.8700 },
+  sivakasi: { lat: 9.4500, lon: 77.8000 },
+  virudhunagar: { lat: 9.5680, lon: 77.9624 },
+  thoothukudi: { lat: 8.7642, lon: 78.1348 },
+  tuticorin: { lat: 8.7642, lon: 78.1348 },
+  palani: { lat: 10.4492, lon: 77.5213 },
+  dindigul: { lat: 10.3673, lon: 77.9803 }
+};
 
 export default function WorkerSearch({
   isOpen,
@@ -33,9 +150,14 @@ export default function WorkerSearch({
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState([]);
   const [searched, setSearched] = useState(false);
-  const [viewMode, setViewMode] = useState("table");
+  const [viewMode, setViewMode] = useState(
+    typeof window !== "undefined" && (window.innerWidth < 768 || (window.Capacitor && window.Capacitor.isNativePlatform?.()))
+      ? "card"
+      : "table"
+  );
   const [locating, setLocating] = useState(false);
   const [searchingMap, setSearchingMap] = useState(false);
+  const [coordinates, setCoordinates] = useState(null); // { lat, lon }
 
   const recentSearches = [
     `${serviceName} in madurai`,
@@ -43,36 +165,179 @@ export default function WorkerSearch({
     `${serviceName} in chennai`,
   ];
 
-  const normalizeQuery = (rawQuery) => {
-    return rawQuery.replace(/\s+from\s+/gi, ' in ');
+  const getStandardServiceName = (service) => {
+    if (!service) return "Worker";
+    const clean = service.toLowerCase().trim();
+    if (clean.includes("electr") || clean.includes("wire") || clean.includes("wiring") || clean.includes("current")) {
+      return "Electrical Repair";
+    }
+    if (clean.includes("clean") || clean.includes("maid") || clean.includes("housekeep")) {
+      return "Cleaning";
+    }
+    if (clean.includes("ac ") || clean === "ac" || clean.includes("air") || clean.includes("cool") || clean.includes("fridge")) {
+      return "AC Service";
+    }
+    if (clean.includes("carp") || clean.includes("wood") || clean.includes("furnit")) {
+      return "Carpentry";
+    }
+    if (clean.includes("plumb") || clean.includes("pipe") || clean.includes("water")) {
+      return "Plumbing";
+    }
+    if (clean.includes("pest") || clean.includes("bug") || clean.includes("termite")) {
+      return "Pest Control";
+    }
+    return service.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
   };
 
-  const searchWorkersWithQuery = async (rawQuery) => {
-    const searchQuery = normalizeQuery(rawQuery); 
-    if (!searchQuery.trim()) return;
+  const cleanQuery = (rawQuery) => {
+    if (!rawQuery) return "";
+    let q = rawQuery.trim();
+    q = q.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, " ").replace(/\s+/g, " ");
+    const typos = {
+      "repari": "repair",
+      "electical": "electrical",
+      "electican": "electrician",
+      "plumbin": "plumbing",
+      "carpentri": "carpentry",
+      "clen": "clean",
+      "celan": "clean",
+      "serivce": "service",
+      "servise": "service",
+      "electricals": "electrical",
+      "plumbers": "plumber",
+      "carpenters": "carpenter",
+      "cleaners": "cleaner"
+    };
+    for (const [typo, replacement] of Object.entries(typos)) {
+      q = q.replace(new RegExp(typo, "gi"), replacement);
+    }
+    return q;
+  };
+
+  const calculateRelevanceScore = (worker, cityQuery, lat = null, lon = null) => {
+    let score = 0;
+
+    // 1. Database registered worker boost
+    if (worker.isDbWorker) {
+      score += 5;
+    }
+
+    // 2. Online status boost
+    if (worker.isOnline === true) {
+      score += 4;
+    }
+
+    // 3. Exact city match in address/location
+    const cLower = cityQuery.toLowerCase();
+    const wLoc = (worker.location || "").toLowerCase();
+    if (wLoc.includes(cLower)) {
+      score += 5;
+    }
+
+    // 4. Proximity / Distance Boost
+    // If worker has no coordinates, try to resolve from their city name
+    let wLat = worker.lat;
+    let wLon = worker.lon;
+    if (!wLat || !wLon) {
+      for (const [cityName, coords] of Object.entries(cityCoords)) {
+        if (wLoc.includes(cityName)) {
+          wLat = coords.lat;
+          wLon = coords.lon;
+          break;
+        }
+      }
+    }
+
+    if (lat && lon && wLat && wLon) {
+      const distance = getHaversineDistance(lat, lon, wLat, wLon);
+      worker.distance = distance; // save distance to render on UI
+      worker.lat = wLat;
+      worker.lon = wLon;
+      
+      if (distance <= 5) {
+        score += 5;
+      } else if (distance <= 15) {
+        score += 3;
+      } else if (distance <= 30) {
+        score += 1.5;
+      }
+    }
+
+    // 5. Star Rating weight
+    const ratingVal = parseFloat(worker.rating) || 0;
+    score += ratingVal / 10;
+
+    return score;
+  };
+
+  const searchWorkersWithQuery = async (rawQuery, lat = null, lon = null) => {
+    const cleanedQuery = cleanQuery(rawQuery); 
+    if (!cleanedQuery.trim()) return;
 
     setLoading(true);
     setSearched(true);
 
-    const parts = searchQuery.split(' in ');
-    if (parts.length !== 2) {
-      console.error("Invalid search format. Use 'service in city' or 'service from city'");
-      setLoading(false);
-      setResults([]);
-      return;
+    let service = serviceName || "workers";
+    let city = "Nearby";
+
+    // Split with case-insensitive 'in' or 'from'
+    const parts = cleanedQuery.split(/\s+(?:in|from)\s+/i);
+    if (parts.length === 2) {
+      service = parts[0].trim();
+      city = parts[1].trim();
+    } else {
+      const queryStr = cleanedQuery.trim().toLowerCase();
+      
+      // Fuzzy detect if the entire query is a city name
+      const fuzzyCity = resolveFuzzyCity(queryStr);
+      const isKnownCity = fuzzyCity !== queryStr && fuzzyCity !== "";
+      const isDirectKnown = knownCities.some(c => queryStr.includes(c.toLowerCase()) || c.toLowerCase().includes(queryStr));
+      
+      const hasServiceKeywords = ["repair", "service", "plumb", "electr", "carp", "clean", "pest", "wire", "current"].some(k => queryStr.includes(k));
+      
+      if ((isKnownCity || isDirectKnown) && !hasServiceKeywords) {
+        city = isKnownCity ? fuzzyCity : queryStr;
+        service = serviceName || "workers";
+      } else if (!(isKnownCity || isDirectKnown) && hasServiceKeywords) {
+        service = cleanedQuery.trim();
+        city = "Nearby";
+      } else {
+        if (serviceName && queryStr.includes(serviceName.toLowerCase())) {
+          service = serviceName;
+          city = cleanedQuery.trim().replace(new RegExp(serviceName, "gi"), "").trim();
+          if (!city) city = "Nearby";
+        } else {
+          city = cleanedQuery.trim();
+          service = serviceName || "workers";
+        }
+      }
     }
-    const service = parts[0].trim();
-    const city = parts[1].trim();
+
+    // Fuzzy resolve city for search API calls
+    const resolvedCity = resolveFuzzyCity(city);
+    const formattedCity = resolvedCity || city.charAt(0).toUpperCase() + city.slice(1).toLowerCase();
+    const standardService = getStandardServiceName(service);
 
     const baseUrl = API_BASE_URL;
+
+    // Resolve search center coordinates if GPS coordinates aren't active
+    let activeLat = lat || coordinates?.lat || null;
+    let activeLon = lon || coordinates?.lon || null;
+    
+    if (!activeLat || !activeLon) {
+      const lCity = formattedCity.toLowerCase();
+      if (cityCoords[lCity]) {
+        activeLat = cityCoords[lCity].lat;
+        activeLon = cityCoords[lCity].lon;
+      }
+    }
 
     try {
       let dbWorkers = [];
       
-      // STEP 1: Instant DB query
       try {
         const dbRes = await axios.get(
-          `${baseUrl}/api/workers/search?service=${encodeURIComponent(service)}&city=${encodeURIComponent(city)}`
+          `${baseUrl}/api/workers/search?service=${encodeURIComponent(standardService)}&city=${encodeURIComponent(formattedCity)}`
         );
         if (dbRes.data.success && Array.isArray(dbRes.data.workers)) {
           dbWorkers = dbRes.data.workers.map(w => ({
@@ -81,30 +346,42 @@ export default function WorkerSearch({
             email: w.email,
             phone: w.phone || "Not available",
             location: w.location || "Not specified",
-            service: w.service || service,
-            rating: "5.0",
+            service: w.service || standardService,
+            rating: w.rating || "5.0",
             verified: true,
             isDbWorker: true,
+            isOnline: w.isOnline ?? false,
+            lat: w.lat || null,
+            lon: w.lon || null
           }));
         }
       } catch (dbErr) {
         console.error("DB Workers Search Error:", dbErr);
       }
 
-      // Show DB results instantly and shut down the primary blocking loader spinner!
+      // Calculate initial relevance scores for DB workers
+      dbWorkers.forEach(w => {
+        w.score = calculateRelevanceScore(w, formattedCity, activeLat, activeLon);
+      });
+      dbWorkers.sort((a, b) => b.score - a.score);
+
       setResults(dbWorkers);
       setLoading(false);
 
-      // STEP 2: Background asynchronous Map/Apify Fetch (Does not block the UI!)
-      console.log("📡 Initiating background query for dynamic Map shops...");
+      console.log(`📡 Initiating background query for dynamic Map shops using coordinates (${activeLat}, ${activeLon})...`);
       setSearchingMap(true);
       
-      // Dispatch as an independent async task so search finishes immediately
       (async () => {
         try {
+          let fetchUrl = `${baseUrl}/api/fetch?service=${encodeURIComponent(standardService)}&city=${encodeURIComponent(formattedCity)}`;
+          if (activeLat && activeLon) {
+            fetchUrl += `&lat=${activeLat}&lon=${activeLon}`;
+          }
+          console.log(`📡 Sending dynamic fetch API query: ${fetchUrl}`);
+
           const res = await axios.get(
-            `${baseUrl}/api/fetch?service=${encodeURIComponent(service)}&city=${encodeURIComponent(city)}`,
-            { timeout: 30000 } // 30s background buffer so it never gets canceled prematurely
+            fetchUrl,
+            { timeout: 30000 }
           );
           
           if (res.data.success && Array.isArray(res.data.data)) {
@@ -113,23 +390,31 @@ export default function WorkerSearch({
               name: business.title || business.name || "Unknown Shop",
               phone: business.phone || "Not available",
               location: business.address || "Not specified",
-              service: service,
+              service: getStandardServiceName(standardService),
               rating: business.rating || "4.5",
               verified: true,
-              isMapWorker: true
+              isMapWorker: true,
+              isOnline: false,
+              lat: business.lat || null,
+              lon: business.lon || null
             }));
             
             console.log(`✅ Background fetch resolved. Appending ${mapWorkers.length} external shops.`);
-            // Smoothly append new map shops to existing db results
             setResults(prev => {
-              // Remove duplicates based on ID or Name
               const existingIds = new Set(prev.map(p => p._id));
               const uniqueMapWorkers = mapWorkers.filter(mw => !existingIds.has(mw._id));
-              return [...prev, ...uniqueMapWorkers];
+              const combined = [...prev, ...uniqueMapWorkers];
+              
+              // Calculate relevance score and sort all combined results
+              combined.forEach(w => {
+                w.score = calculateRelevanceScore(w, formattedCity, activeLat, activeLon);
+              });
+              
+              return combined.sort((a, b) => b.score - a.score);
             });
           }
         } catch (mapErr) {
-          console.warn("⚠️ Background Map Fetch silently failed (expected on slow connections):", mapErr.message);
+          console.warn("⚠️ Background Map Fetch silently failed:", mapErr.message);
         } finally {
           setSearchingMap(false);
         }
@@ -143,7 +428,7 @@ export default function WorkerSearch({
   };
 
   const searchWorkers = () => {
-    searchWorkersWithQuery(query);
+    searchWorkersWithQuery(query, coordinates?.lat, coordinates?.lon);
   };
 
   const handleWhatsApp = (worker) => {
@@ -178,9 +463,11 @@ export default function WorkerSearch({
       if (city) {
         const newQuery = `${serviceName} in ${city}`;
         setQuery(newQuery);
-        searchWorkersWithQuery(newQuery);
+        searchWorkersWithQuery(newQuery, latitude, longitude);
       } else {
-        fetchLocationViaIP();
+        const fallbackQuery = `${serviceName} in Nearby`;
+        setQuery(fallbackQuery);
+        searchWorkersWithQuery(fallbackQuery, latitude, longitude);
       }
     } catch (error) {
       try {
@@ -193,12 +480,16 @@ export default function WorkerSearch({
         if (city) {
           const newQuery = `${serviceName} in ${city}`;
           setQuery(newQuery);
-          searchWorkersWithQuery(newQuery);
+          searchWorkersWithQuery(newQuery, latitude, longitude);
         } else {
-          fetchLocationViaIP();
+          const fallbackQuery = `${serviceName} in Nearby`;
+          setQuery(fallbackQuery);
+          searchWorkersWithQuery(fallbackQuery, latitude, longitude);
         }
       } catch (err2) {
-        fetchLocationViaIP();
+        const fallbackQuery = `${serviceName} in Nearby`;
+        setQuery(fallbackQuery);
+        searchWorkersWithQuery(fallbackQuery, latitude, longitude);
       }
     } finally {
       setLocating(false);
@@ -211,28 +502,70 @@ export default function WorkerSearch({
     let permissionBlocked = false;
 
     try {
-      const isNative = window.Capacitor?.isNativePlatform?.();
+      const isNative = Capacitor.isNativePlatform();
+      console.log("📡 [Search GPS] Running on native platform:", isNative);
+      
       if (isNative) {
         try {
-          await Geolocation.requestPermissions();
-          const position = await Geolocation.getCurrentPosition({
-            enableHighAccuracy: true,
-            timeout: 15000
-          });
-          if (position && position.coords) {
-            latitude = position.coords.latitude;
-            longitude = position.coords.longitude;
-            console.log("📍 [Search GPS] Capacitor Native Coordinates Locked:", latitude, longitude);
+          let permStatus = await Geolocation.checkPermissions();
+          console.log("📍 [Search GPS] Current native permission status:", permStatus);
+          
+          if (permStatus.location !== 'granted') {
+            console.log("🔑 [Search GPS] Requesting native Android location permissions...");
+            permStatus = await Geolocation.requestPermissions();
+          }
+
+          if (permStatus.location === 'granted') {
+            console.log("📡 [Search GPS] Fetching native high-accuracy live location...");
+            try {
+              // Primary Attempt: High-Accuracy satellite GPS (7s timeout so it doesn't block indoors)
+              const position = await Geolocation.getCurrentPosition({
+                enableHighAccuracy: true,
+                timeout: 7000,
+                maximumAge: 0 // Prevent stale cached reading
+              });
+              if (position && position.coords) {
+                latitude = position.coords.latitude;
+                longitude = position.coords.longitude;
+                console.log("🟢 [Search GPS] Native high-accuracy GPS Lock Resolved:", latitude, longitude);
+              }
+            } catch (errHigh) {
+              console.warn("⚠️ [Search GPS] High-accuracy satellite lock failed or timed out. Falling back to coarse network position...", errHigh);
+              try {
+                // Secondary Attempt: Coarse/Network Location (wifi/cellular tower) - works instantly indoors!
+                const position = await Geolocation.getCurrentPosition({
+                  enableHighAccuracy: false,
+                  timeout: 5000,
+                  maximumAge: 30000 // Accept reasonably fresh coordinates
+                });
+                if (position && position.coords) {
+                  latitude = position.coords.latitude;
+                  longitude = position.coords.longitude;
+                  console.log("🟢 [Search GPS] Coarse/Network Location Resolved:", latitude, longitude);
+                }
+              } catch (errCoarse) {
+                console.error("❌ [Search GPS] Coarse/Network location attempt also failed:", errCoarse);
+                throw errCoarse;
+              }
+            }
+          } else {
+            permissionBlocked = true;
+            console.error("🛑 [Search GPS] Location permission denied by native user.");
+            alert("Location permission is required to search for nearby workers. Please allow location access in your App settings.");
           }
         } catch (capErr) {
-          console.warn("⚠️ [Search GPS] Capacitor Native Geolocation error:", capErr);
+          console.error("❌ [Search GPS] Capacitor Native Geolocation error:", capErr);
+          if (capErr.message && (capErr.message.includes("location") || capErr.message.includes("settings") || capErr.message.includes("timeout"))) {
+            alert("Unable to fetch location. Please ensure your device GPS/Location services are turned ON and try again.");
+          } else {
+            alert("Error fetching GPS: " + (capErr.message || capErr));
+          }
         }
-      }
-
-      // WEBSITE BROWSER GPS - Fallback if not native or Capacitor failed
-      if (latitude === undefined && longitude === undefined) {
+      } else {
+        // WEBSITE BROWSER GPS - Fallback if not native
         if (!navigator.geolocation) {
-          console.error("❌ [Search GPS] Navigator.geolocation UNSUPPORTED on HTTP origin.");
+          console.error("❌ [Search GPS] Navigator.geolocation UNSUPPORTED on this browser.");
+          alert("Your browser does not support Geolocation.");
         } else {
           const getWebPosition = (options) =>
             new Promise((resolve, reject) => {
@@ -240,10 +573,10 @@ export default function WorkerSearch({
             });
 
           try {
-            console.log("📡 [Search GPS] Attempt 1: Requesting fresh High-Accuracy coordinates...");
+            console.log("📡 [Search GPS] Web Geolocation: Requesting high-accuracy coordinates...");
             const position = await getWebPosition({
               enableHighAccuracy: true,
-              timeout: 8000,
+              timeout: 10000,
               maximumAge: 0
             });
             if (position && position.coords) {
@@ -254,58 +587,38 @@ export default function WorkerSearch({
           } catch (err) {
             console.error("⚠️ [Search GPS] High-accuracy query failed. Code:", err.code);
             if (err.code === 1) {
-              console.error("🛑 [Search GPS] User blocked permission.");
               permissionBlocked = true;
+              alert("Location permission was blocked. Please enable it in browser settings.");
             } else {
               try {
-                console.log("📡 [Search GPS] Attempt 2: Pulling OS-Cached coordinates for immediate response...");
+                console.log("📡 [Search GPS] Web Fallback: Requesting cached coordinates...");
                 const position = await getWebPosition({
                   enableHighAccuracy: false,
                   timeout: 5000,
-                  maximumAge: 600000
+                  maximumAge: 60000
                 });
                 if (position && position.coords) {
                   latitude = position.coords.latitude;
                   longitude = position.coords.longitude;
-                  console.log("🟢 [Search GPS] OS-Cached coordinates loaded.");
                 }
               } catch (err2) {
-                console.warn("⚠️ [Search GPS] OS-Cached fallback failed. Code:", err2.code);
-                if (err2.code === 1) {
-                  permissionBlocked = true;
-                } else {
-                  try {
-                    console.log("📡 [Search GPS] Attempt 3: Native Browser Default query...");
-                    const position = await getWebPosition({ timeout: 8000 });
-                    if (position && position.coords) {
-                      latitude = position.coords.latitude;
-                      longitude = position.coords.longitude;
-                      console.log("🟢 [Search GPS] Native default coordinates loaded.");
-                    }
-                  } catch (err3) {
-                    console.error("❌ [Search GPS] All GPS pathways failed. Code:", err3.code);
-                  }
-                }
+                console.warn("⚠️ Web cached fallback failed.");
               }
             }
           }
         }
       }
     } catch (err) {
-      console.error("🚨 [Search GPS] Critical Flow crash:", err);
+      console.error("🚨 [Search GPS] Critical Geolocation Flow crash:", err);
     }
 
     if (permissionBlocked) {
-      console.warn("🛑 Stopping search fallback. Permission blocked by browser user.");
       setLocating(false);
       return;
     }
 
     if (latitude !== undefined && longitude !== undefined) {
-      console.group("🎯 [Search GPS] Core Search Parameters Loaded!");
-      console.log("Latitude:", latitude);
-      console.log("Longitude:", longitude);
-      console.groupEnd();
+      setCoordinates({ lat: latitude, lon: longitude });
       await fetchAddressAndSearch(latitude, longitude);
     } else {
       // Profile Fallback Strategy for Search
@@ -326,10 +639,9 @@ export default function WorkerSearch({
             else if (fullAddress.includes("chennai")) parsedCity = "Chennai";
             else if (fullAddress.includes("trichy") || fullAddress.includes("tiruchirappalli")) parsedCity = "Trichy";
             else {
-              // 2. Fallback: Split by comma and extract the city segment (typically 2nd to last or last)
+              // 2. Fallback: Split by comma and extract the city segment
               const parts = storedUser.address.split(",").map(p => p.trim()).filter(Boolean);
               if (parts.length >= 2) {
-                // Check if last part is state (e.g., Tamil Nadu) or pincode
                 const lastPart = parts[parts.length - 1];
                 if (/^\d+$/.test(lastPart) || lastPart.toLowerCase().includes("tamil") || lastPart.toLowerCase().includes("india")) {
                   parsedCity = parts[parts.length - 2] || parts[0];
@@ -363,7 +675,7 @@ export default function WorkerSearch({
         return;
       }
 
-      console.warn("⚠️ [Search GPS] Signal lost and no profile address found. Running high-accuracy IP mapping...");
+      console.warn("⚠️ [Search GPS] GPS unavailable and profile has no cached address. Trying IP geolocation...");
       await fetchLocationViaIP();
     }
   };
@@ -373,7 +685,7 @@ export default function WorkerSearch({
       setLocating(true);
       let data = null;
 
-      // Tier 1: High-Accuracy localized API
+      // Tier 1: ipinfo.io
       try {
         console.log("🌐 [Search Engine] Querying ipinfo.io...");
         const res = await fetch("https://ipinfo.io/json");
@@ -385,10 +697,10 @@ export default function WorkerSearch({
           }
         }
       } catch (err) {
-        console.warn("⚠️ ipinfo.io failed, escalating...", err);
+        console.warn("⚠️ ipinfo failed, trying next...");
       }
 
-      // Tier 2: Regional matching
+      // Tier 2: ipapi.co
       if (!data || !data.city) {
         try {
           console.log("🌐 [Search Engine] Querying ipapi.co...");
@@ -401,11 +713,11 @@ export default function WorkerSearch({
             }
           }
         } catch (err) {
-          console.warn("⚠️ ipapi.co failed, trying freeipapi...", err);
+          console.warn("⚠️ ipapi failed, trying next...");
         }
       }
 
-      // Tier 3: Fast Regional Cache
+      // Tier 3: freeipapi.com
       if (!data || !data.city) {
         try {
           console.log("🌐 [Search Engine] Querying freeipapi.com...");
@@ -418,24 +730,7 @@ export default function WorkerSearch({
             }
           }
         } catch (err) {
-          console.warn("⚠️ freeipapi.com failed, trying geolocation-db...", err);
-        }
-      }
-
-      // Tier 4: Last resort broad gateway
-      if (!data || !data.city) {
-        try {
-          console.log("🌐 [Search Engine] Querying geolocation-db.com...");
-          const res = await fetch("https://geolocation-db.com/json/");
-          if (res.ok) {
-            const ipData = await res.json();
-            if (ipData && ipData.city && ipData.city !== "Not Found") {
-              data = { city: ipData.city };
-              console.log("✅ [Search Engine] Last resort match:", data.city);
-            }
-          }
-        } catch (err) {
-          console.error("❌ [Search Engine] Entire fallback failed.", err);
+          console.warn("⚠️ freeipapi failed, trying next...");
         }
       }
 
@@ -443,11 +738,10 @@ export default function WorkerSearch({
         let city = data.city;
         city = city.replace(/\s+District$/i, "").replace(/\s+County$/i, "").trim();
         
-        // Detect and reject broad routing hubs to prevent incorrect automated searches
+        // Detect broad broadband gateway hubs
         const lowerCity = city.toLowerCase();
         if (lowerCity.includes("chennai") || lowerCity.includes("bangalore") || lowerCity.includes("bengaluru")) {
-          console.warn("⚠️ [Search Engine] Filtered inaccurate broadband hub:", city);
-          // Set partial query so they can just type the correct city name
+          console.warn("⚠️ [Search Engine] Filtered broadband hub:", city);
           setQuery(`${serviceName} in `);
           return;
         }
@@ -456,7 +750,7 @@ export default function WorkerSearch({
         setQuery(newQuery);
         searchWorkersWithQuery(newQuery);
       } else {
-        console.warn("⚠️ Could not retrieve location automatically.");
+        console.warn("⚠️ IP location matching failed.");
         setQuery(`${serviceName} in `);
       }
     } catch (err) {
@@ -498,7 +792,10 @@ export default function WorkerSearch({
 
               <input
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setCoordinates(null);
+                }}
                 placeholder={`Example: ${serviceName} in madurai`}
                 className="w-full pl-11 pr-4 py-4 rounded-2xl border border-gray-200 outline-none focus:ring-2 focus:ring-emerald-300"
               />
@@ -528,9 +825,10 @@ export default function WorkerSearch({
               <button
                 key={city}
                 onClick={() => {
+                  setCoordinates(null);
                   const newQuery = `${serviceName} in ${city}`;
                   setQuery(newQuery);
-                  searchWorkersWithQuery(newQuery);
+                  searchWorkersWithQuery(newQuery, null, null);
                 }}
                 className="text-xs px-2.5 py-1 rounded-lg bg-white hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200 border border-gray-200 transition-all font-medium text-gray-600 shadow-sm"
               >
@@ -544,7 +842,11 @@ export default function WorkerSearch({
             {recentSearches.map((item, i) => (
               <button
                 key={i}
-                onClick={() => setQuery(item)}
+                onClick={() => {
+                  setCoordinates(null);
+                  setQuery(item);
+                  searchWorkersWithQuery(item, null, null);
+                }}
                 className="text-xs bg-white border px-3 py-2 rounded-full hover:bg-emerald-50"
               >
                 {item}
@@ -579,7 +881,7 @@ export default function WorkerSearch({
           {searchingMap && (
             <div className="mb-4 bg-emerald-50 border border-emerald-100 rounded-xl p-3.5 flex items-center justify-center gap-3 text-emerald-700 animate-pulse text-sm font-medium shadow-sm">
               <FaSpinner className="animate-spin text-emerald-600" />
-              <span>📍 Connecting to live Google/OpenStreetMap to search for all local shops...</span>
+              <span> Connecting to live Google/OpenStreetMap to search for all local shops...</span>
             </div>
           )}
           {loading ? (
@@ -637,9 +939,16 @@ export default function WorkerSearch({
                       <td className="px-2">{worker.service}</td>
 
                       <td className="px-2">
-                        <div className="flex items-center gap-1">
-                          <FaMapMarkerAlt className="text-emerald-500 shrink-0" />
-                          <span className="truncate max-w-[150px]">{worker.location}</span>
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-1">
+                            <FaMapMarkerAlt className="text-emerald-500 shrink-0" />
+                            <span className="truncate max-w-[150px] font-medium">{worker.location}</span>
+                          </div>
+                          {worker.distance && worker.distance !== Infinity && (
+                            <span className="text-[10px] text-teal-600 font-semibold pl-4">
+                              {worker.distance.toFixed(1)} km away
+                            </span>
+                          )}
                         </div>
                       </td>
 
@@ -704,7 +1013,7 @@ export default function WorkerSearch({
                             }}
                             className="bg-amber-50 hover:bg-amber-500 border border-amber-200 hover:border-amber-500 text-amber-700 hover:text-white px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 text-xs whitespace-nowrap"
                           >
-                            ⭐ Review
+                             Review
                           </button>
                         </div>
                       </td>
@@ -740,10 +1049,17 @@ export default function WorkerSearch({
                     </div>
                   </div>
 
-                  <p className="text-sm flex items-center gap-2 mb-2">
-                    <FaMapMarkerAlt className="text-emerald-500" />
-                    {worker.location}
-                  </p>
+                  <div className="text-sm flex flex-col mb-2 gap-0.5">
+                    <div className="flex items-center gap-2">
+                      <FaMapMarkerAlt className="text-emerald-500 shrink-0" />
+                      <span className="font-medium text-gray-700">{worker.location}</span>
+                    </div>
+                    {worker.distance && worker.distance !== Infinity && (
+                      <span className="text-xs text-teal-600 font-bold pl-6">
+                        {worker.distance.toFixed(1)} km away
+                      </span>
+                    )}
+                  </div>
 
                   <div className="flex items-center gap-2 mb-2 text-sm">
                     <FaPhone className="text-emerald-500" />
