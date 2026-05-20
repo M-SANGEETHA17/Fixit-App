@@ -6,6 +6,8 @@ const bookingSchema = new mongoose.Schema(
     phone: { type: String, required: true, trim: true },
     serviceType: { type: String, required: true },
     location: { type: String, required: true },     // ✅ changed from 'address'
+    bookingDate: { type: String },
+    bookingTime: { type: String },
 
     workerId: {
       type: mongoose.Schema.Types.ObjectId,

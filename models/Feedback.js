@@ -8,6 +8,11 @@ const feedbackSchema = new mongoose.Schema(
       lowercase: true,
       trim: true,
     },
+    workerName: {
+      type: String,
+      required: true,
+      trim: true,
+    },
     customerName: {
       type: String,
       required: true,
@@ -24,10 +29,17 @@ const feedbackSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    image: {
+      type: String,
+      default: null,
+    },
   },
   {
     timestamps: true,
   }
 );
 
+if (mongoose.models && mongoose.models.Feedback) {
+  delete mongoose.models.Feedback;
+}
 export default mongoose.model("Feedback", feedbackSchema);
