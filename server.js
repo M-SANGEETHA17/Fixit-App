@@ -88,10 +88,9 @@ app.get("/", (req, res) => {
   res.send("Backend is running");
 });
 
-
-// Force Nodemon server refresh: 2026-05-19T15:59:19+05:30
-app.listen(5005, () => {
-  console.log("Server running on port 5005");
+const PORT = process.env.PORT || 5005;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 }).on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
       console.error(" Windows is silently running an OLD, STALE version of your server!");
@@ -100,3 +99,5 @@ app.listen(5005, () => {
       console.error(" Server start failed:", err.message);
   }
 });
+
+
